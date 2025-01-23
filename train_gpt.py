@@ -90,40 +90,7 @@ def mm_backward_op(g: Tensor, x_f8: Tensor, w_f8: Tensor, x_s: float, w_s: float
 @mm_backward_op.register_fake
 def _(g: Tensor, x_f8: Tensor, w_f8: Tensor, *_):
     return x_f8.to(torch.bfloat16), w_f8.to(torch.float32)
-"""
 
-@torch.library.custom_op("nanogpt::mm", mutates_args=())
-def mm_op(x: Tensor, w: Tensor, x_s: float, w_s: float, grad_s: float) -> tuple[Tensor, Tensor, Tensor]:
-    @torch.compile
-    def impl(x: Tensor, w: Tensor):
-        assert x.is_contiguous() and w.is_contiguous()
-        out = x @ w.t()
-        return out, x, w
-
-    return impl(x, w)
-
-@mm_op.register_fake
-def _(x: Tensor, w: Tensor, *_):
-    assert x.ndim == w.ndim == 2
-    assert x.shape[1] == w.shape[1]
-    assert x.device == w.device
-    assert x.is_contiguous() and w.is_contiguous()
-    return x @ w.t(), x, w
-
-@torch.library.custom_op("nanogpt::mm_backward", mutates_args=())
-def mm_backward_op(g: Tensor, x_f8: Tensor, w_f8: Tensor, x_s: float, w_s: float, grad_s: float) -> tuple[Tensor, Tensor]:
-    @torch.compile
-    def impl(grad: Tensor, x: Tensor, w: Tensor):
-        assert grad.is_contiguous()
-        grad_x = grad @ w
-        grad_w = x.t() @ grad
-        return grad_x, grad_w
-
-    return impl(g, x_f8, w_f8)
-
-@mm_backward_op.register_fake
-def _(g: Tensor, x_f8: Tensor, w_f8: Tensor, *_):
-    return x_f8, w_f8
 
 def backward(ctx, grad_out: Tensor, *_):
     x_f8, w_f8 = ctx.saved_tensors
@@ -146,6 +113,8 @@ def lm_head_fp8(x: Tensor, w: Tensor) -> Tensor:
     _x = x.flatten(0, -2)
     out: Tensor = torch.ops.nanogpt.mm(_x, w, x_s=2.0, w_s=32.0, grad_s=2.0**29)[0]
     return out.reshape(*x.shape[:-1], -1)
+
+"""
 
 # -----------------------------------------------------------------------------
 # Muon optimizer
@@ -456,7 +425,7 @@ class GPT(nn.Module):
             x = x + self.skip_weights[i] * skip_connections.pop()
             x = self.blocks[self.num_encoder_layers + i](x, ve_dec[i], x0, block_masks[i])
         x = norm(x)
-        logits = lm_head_fp8(x, self.lm_head.weight) if self.training else self.lm_head(x)
+        logits = self.lm_head(x)#lm_head_fp8(x, self.lm_head.weight) if self.training else self.lm_head(x)
         # @Grad62304977 added tanh softcapping following Gemma 2 paper, @KoszarskyB reduced it from 30 to 15, @YouJiacheng shifted it by +15 (2*sigmoid(2*x)=tanh(x)+1)
         logits = 30 * torch.sigmoid(logits.float() / 7.5)
         loss = F.cross_entropy(logits.view(-1, logits.size(-1)), target_seq)
@@ -640,6 +609,7 @@ for step in range(train_steps + 1):
     for input_seq, target_seq in zip(inputs.split(args.seq_len), targets.split(args.seq_len)):
         loss = model(input_seq, target_seq, sw_num_blks(window_size))
         wandb.log({"loss": loss.item()})
+        print(loss.item())
         loss.backward()
     for param in model.parameters():
         dist.all_reduce(param.grad, op=dist.ReduceOp.AVG)
