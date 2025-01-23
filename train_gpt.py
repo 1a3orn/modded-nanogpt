@@ -7,6 +7,10 @@ import time
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+import wandb
+
+wandb.login()
+wandb.init(project="gpt-nano-stuff")
 
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import torch
@@ -16,7 +20,9 @@ import torch.nn.functional as F
 import torch.distributed as dist
 # use of FlexAttention contributed by @KoszarskyB
 from torch.nn.attention.flex_attention import BlockMask, flex_attention
-torch._inductor.config.coordinate_descent_tuning = True # turn this off for a faster compile time (but slightly slower run)
+
+
+#torch._inductor.config.coordinate_descent_tuning = True # turn this off for a faster compile time (but slightly slower run)
 
 # -----------------------------------------------------------------------------
 # Custom operators : FP8 matmul for lm_head by @YouJiacheng
@@ -451,7 +457,7 @@ def distributed_data_generator(filename_pattern: str, batch_size: int, rank : in
 
 # -----------------------------------------------------------------------------
 # int main
-
+scale_factor = int(os.getenv("SCALE_FACTOR", '32'))
 @dataclass
 class Hyperparameters:
     # data
@@ -459,8 +465,8 @@ class Hyperparameters:
     val_files = "data/fineweb10B/fineweb_val_*.bin" # input .bin to eval validation loss on
     val_tokens = 10485760 # how many tokens of validation data? it's important to keep this fixed for consistent comparisons
     # optimization
-    batch_size = 8*64*1024 # batch size in tokens
-    num_iterations = 1393 # number of iterations to run
+    batch_size = 8*64*1024 / scale_factor # batch size in tokens
+    num_iterations = 1393 * scale_factor # number of iterations to run
     cooldown_frac = 0.4 # fraction of training spent cooling down the learning rate
     # evaluation and logging
     val_loss_every = 125 # every how many steps to evaluate val loss? 0 for only at the end
@@ -521,12 +527,12 @@ embed_params = [model.embed.weight, *model.value_embeds.parameters()]
 scalar_params = [p for p in model.parameters() if p.ndim < 2]
 head_params = [model.lm_head.weight]
 
-# init the optimizer(s)
-adam_params = [dict(params=head_params, lr=0.008), dict(params=embed_params, lr=0.6), dict(params=scalar_params, lr=0.04)]
+# init the optimizer(s) 
+adam_params = [dict(params=head_params, lr=0.008 / scale_factor), dict(params=embed_params, lr=0.6 / scale_factor), dict(params=scalar_params, lr=0.04 / scale_factor)]
 # small adam epsilon by @YouJiacheng. this is an alternate method of fixing the world_size dependence
 # discovered by @fernbear.bsky.social https://x.com/hi_tysam/status/1879692937589875094
 optimizer1 = torch.optim.Adam(adam_params, betas=(0.8, 0.95), fused=True, eps=1e-10)
-optimizer2 = Muon(hidden_matrix_params, lr=0.05, momentum=0.95, rank=rank, world_size=world_size)
+optimizer2 = Muon(hidden_matrix_params, lr=0.05 / scale_factor, momentum=0.95, rank=rank, world_size=world_size)
 optimizers = [optimizer1, optimizer2]
 
 # learning rate schedule: stable then decay
@@ -595,7 +601,9 @@ for step in range(train_steps + 1):
     # --------------- TRAINING SECTION BEGIN -----------------
     inputs, targets = next(train_loader)
     for input_seq, target_seq in zip(inputs.split(args.seq_len), targets.split(args.seq_len)):
-        model(input_seq, target_seq, sw_num_blks(window_size)).backward()
+        loss = model(input_seq, target_seq, sw_num_blks(window_size))
+        wandb.log({"loss": loss.item()})
+        loss.backward()
     for param in model.parameters():
         dist.all_reduce(param.grad, op=dist.ReduceOp.AVG)
     # momentum warmup for Muon
