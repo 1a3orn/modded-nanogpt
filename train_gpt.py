@@ -608,7 +608,7 @@ for step in range(train_steps + 1):
     inputs, targets = next(train_loader)
     for input_seq, target_seq in zip(inputs.split(args.seq_len), targets.split(args.seq_len)):
         loss = model(input_seq, target_seq, sw_num_blks(window_size))
-        wandb.log({"loss": loss.item()})
+        #wandb.log({"loss": loss.item()})
         print(loss.item())
         loss.backward()
     for param in model.parameters():
