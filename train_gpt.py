@@ -547,7 +547,7 @@ schedulers = [torch.optim.lr_scheduler.LambdaLR(opt, get_lr) for opt in optimize
 def sw_num_blks(window_size: int):
     return torch.tensor(window_size // 128, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
 
-model: nn.Module = torch.compile(model)
+model: nn.Module = model#torch.compile(model)
 training_time_ms = 0
 # start the clock
 torch.cuda.synchronize()
