@@ -560,6 +560,8 @@ t0 = time.perf_counter()
 # begin training
 train_steps = args.num_iterations
 wandb.init(project="gpt-nano-stuff")
+loss_sum = 0
+loss_count = 0
 for step in range(train_steps + 1):
     last_step = (step == train_steps)
     # This effectively ignores timing first 10 steps, which are slower for weird reasons.
@@ -607,14 +609,16 @@ for step in range(train_steps + 1):
 
     # --------------- TRAINING SECTION BEGIN -----------------
     inputs, targets = next(train_loader)
-    loss_sum = 0
-    loss_count = 0
     for input_seq, target_seq in zip(inputs.split(args.seq_len), targets.split(args.seq_len)):
         loss = model(input_seq, target_seq, sw_num_blks(window_size))
         loss_sum += loss.item()
         loss_count += 1
         loss.backward()
-    print(loss_sum / loss_count)
+    if step % 50 == 0:
+        print(loss_sum / loss_count)
+        wandb.log({"loss": loss_sum / loss_count})
+        loss_sum = 0
+        loss_count = 0
     for param in model.parameters():
         dist.all_reduce(param.grad, op=dist.ReduceOp.AVG)
     # momentum warmup for Muon
