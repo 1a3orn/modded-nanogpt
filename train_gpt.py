@@ -9,6 +9,10 @@ from functools import lru_cache
 from pathlib import Path
 import wandb
 
+import torch._dynamo
+
+torch._dynamo.config.suppress_errors = True
+
 wandb.login()
 wandb.init(project="gpt-nano-stuff")
 
