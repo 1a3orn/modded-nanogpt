@@ -13,9 +13,6 @@ import torch._dynamo
 
 torch._dynamo.config.suppress_errors = True
 
-wandb.login()
-wandb.init(project="gpt-nano-stuff")
-
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import torch
 torch.empty(1, device="cuda", requires_grad=True).backward() # prevents a bug on some systems
@@ -475,7 +472,7 @@ class Hyperparameters:
     # evaluation and logging
     val_loss_every = 125 # every how many steps to evaluate val loss? 0 for only at the end
     # implementation
-    seq_len = 64*1024 # FlexAttention sequence length
+    seq_len = 64*1024 / scale_factor # FlexAttention sequence length
     save_checkpoint = False
 args = Hyperparameters()
 
