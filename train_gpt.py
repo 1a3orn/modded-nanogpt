@@ -327,11 +327,13 @@ class MLPMoE(nn.Module):
         indices_flat = indices.view(-1)     # [b*t]
         
         output = torch.zeros_like(x_reshaped)
+
+        expert_indices = indices_flat % self.num_experts
         
         # Process each expert's tokens
         for i in range(self.num_experts):
             # Get masks for tokens routed to expert i in any of their routes
-            mask = indices_flat == i
+            mask = expert_indices == i
             if mask.any():
                 # Process tokens through expert and accumulate the output
                 output[mask] = self.experts[i](x_reshaped[mask], indices)
