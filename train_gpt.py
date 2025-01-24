@@ -631,14 +631,15 @@ def sw_num_blks(window_size: int):
 model: nn.Module = model#torch.compile(model)
 
 # print model size
-print(f"Model size: {sum(p.numel() for p in model.parameters()}")
+print(f"Model size: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
 training_time_ms = 0
 # start the clock
 torch.cuda.synchronize()
 t0 = time.perf_counter()
 # begin training
 train_steps = args.num_iterations
-wandb.init(project="gpt-nano-stuff")
+if master_process:
+    wandb.init(project="gpt-nano-stuff")
 loss_sum = 0
 loss_count = 0
 for step in range(train_steps + 1):
@@ -695,7 +696,8 @@ for step in range(train_steps + 1):
         loss.backward()
     if step % 5 == 0:
         print(loss_sum / loss_count)
-        wandb.log({"loss": loss_sum / loss_count})
+        if master_process:
+            wandb.log({"loss": loss_sum / loss_count})
         loss_sum = 0
         loss_count = 0
     for param in model.parameters():
