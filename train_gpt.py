@@ -378,7 +378,7 @@ class Block(nn.Module):
         super().__init__()
         # skip attention of blocks.7 (the 8th layer) by @YouJiacheng
         self.attn = CausalSelfAttention(model_dim, num_heads, layer_idx) if layer_idx != 7 else None
-
+        print(f"Block {layer_idx} type: {layer_type}")
         if layer_type == "mlp":
             self.mlp = MLP(model_dim)
         elif layer_type == "mlp_moe":
