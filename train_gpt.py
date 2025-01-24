@@ -300,11 +300,12 @@ class CausalSelfAttention(nn.Module):
         return y
 
 class MLP(nn.Module):
-    def __init__(self, dim, expansion_factor=4):
+    def __init__(self, dim, expansion_factor=4, zero_init=True):
         super().__init__()
         self.c_fc = CastedLinear(dim, expansion_factor * dim)
         self.c_proj = CastedLinear(expansion_factor * dim, dim)
-        self.c_proj.weight.detach().zero_() # zero init suggested by @Grad62304977
+        if zero_init:
+            self.c_proj.weight.detach().zero_() # zero init suggested by @Grad62304977
 
     def forward(self, x, _indices):
         x = self.c_fc(x)
@@ -316,7 +317,7 @@ class MLPMoE(nn.Module):
     def __init__(self, dim, num_experts=8, expansion_factor=4):
         super().__init__()
         self.num_experts = num_experts
-        self.experts = nn.ModuleList([MLP(dim, expansion_factor) for _ in range(num_experts)])
+        self.experts = nn.ModuleList([MLP(dim, expansion_factor, zero_init=False) for _ in range(num_experts)])
 
     def forward(self, x, indices):
 
@@ -334,7 +335,7 @@ class MLPMoE(nn.Module):
         for i in range(self.num_experts):
             # Get masks for tokens routed to expert i in any of their routes
             mask = expert_indices == i
-            print(f"Expert {i} has {mask.sum()} tokens")
+            #print(f"Expert {i} has {mask.sum()} tokens")
             if mask.any():
                 # Process tokens through expert and accumulate the output
                 output[mask] = self.experts[i](x_reshaped[mask], indices)
