@@ -335,6 +335,11 @@ class MLPMoE(nn.Module):
             if mask.any():
                 # Process tokens through expert and accumulate the output
                 output[mask] = self.experts[i](x_reshaped[mask], indices)
+            else:
+                # If no tokens are routed to this expert, we still need to ensure its parameters get gradients
+                # Process a dummy token to keep the expert's parameters in the computation graph
+                dummy_output = self.experts[i](x_reshaped[:1], indices)
+                output[0] = output[0] * 1.0 + dummy_output[0] * 0.0
         
         # Reshape back to original dimensions
         output = output.view(batch_size, seq_len, hidden_dim)
