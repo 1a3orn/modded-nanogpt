@@ -334,6 +334,7 @@ class MLPMoE(nn.Module):
         for i in range(self.num_experts):
             # Get masks for tokens routed to expert i in any of their routes
             mask = expert_indices == i
+            print(f"Expert {i} has {mask.sum()} tokens")
             if mask.any():
                 # Process tokens through expert and accumulate the output
                 output[mask] = self.experts[i](x_reshaped[mask], indices)
