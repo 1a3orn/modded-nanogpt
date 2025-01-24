@@ -343,7 +343,9 @@ class MLPMoE(nn.Module):
         ]
 
         # Rebuild full output in sorted order then undo permutation
-        output_flat = torch.cat(processed_chunks)  # [b*s, c]
+        output_flat = torch.zeros_like(sorted_x)
+        output_flat[sorted_indices] = torch.cat(processed_chunks)
+        #output_flat = torch.cat(processed_chunks)  # [b*s, c]
         output = torch.empty_like(sorted_x)
         output.scatter_(  # reverse the argsort: inject results to original positions
             dim=0,
