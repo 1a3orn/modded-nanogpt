@@ -319,39 +319,27 @@ class MLPMoE(nn.Module):
         self.experts = nn.ModuleList([MLP(dim, expansion_factor) for _ in range(num_experts)])
 
     def forward(self, x, indices):
-        # x shape: [batch_size, sequence_length, hidden_dim]
-        # indices shape: [batch_size, sequence_length] containing expert assignments (0 to num_experts-1)
 
-        x_flat = x.view(-1, x.size(-1))
-        # Combines batch and sequence dims:
-        # [batch_size * sequence_length, hidden_dim]
-
-        # Sort tokens by expert index to group workloads
-        sorted_indices = indices.view(-1).argsort()
-        sorted_x = x_flat[sorted_indices]  # [b*s, c] rearranged
-
-        # Count tokens per expert (avoids dynamic splits)
-        expert_counts = torch.bincount(indices.view(-1), minlength=self.num_experts)
+        batch_size, seq_len, hidden_dim = x.shape
         
-        # Split sorted tokens into chunks for each expert
-        start_idx = 0
-        processed_chunks = []
-        for expert_idx, count in enumerate(expert_counts):
-            if count == 0:
-                continue
-            chunk = sorted_x[start_idx:start_idx + count]
-            processed_chunks.append(self.experts[expert_idx](chunk, indices))
-            start_idx += count
-
-        # Concatenate all processed chunks
-        output_flat = torch.cat(processed_chunks)
+        # Reshape input and indices for expert routing
+        x_reshaped = x.view(-1, hidden_dim)  # [b*t, c]
+        indices_flat = indices.view(-1)     # [b*t]
         
-        # Unsort the results back to original order
-        output = torch.empty_like(x_flat)
-        output[sorted_indices] = output_flat
-
-        # Restore original shape [b, s, c]
-        return output.view_as(x)
+        output = torch.zeros_like(x_reshaped)
+        
+        # Process each expert's tokens
+        for i in range(self.num_experts):
+            # Get masks for tokens routed to expert i in any of their routes
+            mask = indices_flat == i
+            if mask.any():
+                # Process tokens through expert and accumulate the output
+                output[mask] = self.experts[i](x_reshaped[mask], indices)
+        
+        # Reshape back to original dimensions
+        output = output.view(batch_size, seq_len, hidden_dim)
+        
+        return output
 
 class MLPMoEComm(nn.Module):
     """
