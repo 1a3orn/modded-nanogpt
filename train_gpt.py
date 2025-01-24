@@ -338,7 +338,7 @@ class MLPMoE(nn.Module):
 
         # Parallel process ALL experts (no loop!)
         processed_chunks = [
-            expert(chunk) for expert, chunk in zip(self.experts, chunked_x)
+            expert(chunk, indices) for expert, chunk in zip(self.experts, chunked_x)
             if chunk.size(0) > 0  # skip empty!
         ]
 
