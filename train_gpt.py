@@ -300,31 +300,107 @@ class CausalSelfAttention(nn.Module):
         return y
 
 class MLP(nn.Module):
-    def __init__(self, dim):
+    def __init__(self, dim, expansion_factor=4):
         super().__init__()
-        self.c_fc = CastedLinear(dim, 4 * dim)
-        self.c_proj = CastedLinear(4 * dim, dim)
+        self.c_fc = CastedLinear(dim, expansion_factor * dim)
+        self.c_proj = CastedLinear(expansion_factor * dim, dim)
         self.c_proj.weight.detach().zero_() # zero init suggested by @Grad62304977
 
-    def forward(self, x):
+    def forward(self, x, _indices):
         x = self.c_fc(x)
         x = F.relu(x).square() # https://arxiv.org/abs/2109.08668v2; ~1-2% better than GELU; suggested by @SKYLINEZ007 and @Grad62304977
         x = self.c_proj(x)
         return x
 
+class MLPMoE(nn.Module):
+    def __init__(self, dim, num_experts=8, expansion_factor=4):
+        super().__init__()
+        self.num_experts = num_experts
+        self.experts = nn.ModuleList([MLP(dim, expansion_factor) for _ in range(num_experts)])
+
+    def forward(self, x, indices):
+        # x shape: [batch_size, sequence_length, hidden_dim]
+        # indices shape: [batch_size, sequence_length] containing expert assignments (0 to num_experts-1)
+    
+        x_flat = x.view(-1, x.size(-1))
+        # Combines batch and sequence dims:
+        # [batch_size * sequence_length, hidden_dim]
+
+        # Sort tokens by expert index to group workloads
+        sorted_indices = indices.view(-1).argsort()
+        sorted_x = x_flat[sorted_indices]  # [b*s, c] rearranged
+
+        # Count tokens per expert (avoids dynamic splits)
+        expert_counts = torch.bincount(indices.view(-1), minlength=self.num_experts)
+
+        # Split sorted tokens into chunks for each expert
+        chunked_x = sorted_x.split(expert_counts.tolist())  # list of [count_i, c]
+
+        # Parallel process ALL experts (no loop!)
+        processed_chunks = [
+            expert(chunk) for expert, chunk in zip(self.experts, chunked_x)
+            if chunk.size(0) > 0  # skip empty!
+        ]
+
+        # Rebuild full output in sorted order then undo permutation
+        output_flat = torch.cat(processed_chunks)  # [b*s, c]
+        output = torch.empty_like(sorted_x)
+        output.scatter_(  # reverse the argsort: inject results to original positions
+            dim=0,
+            index=sorted_indices.unsqueeze(-1).expand(-1, x.size(-1)),
+            src=output_flat
+        )
+
+        # Restore original shape [b, s, c]
+        return output.view_as(x)
+
+class MLPMoEComm(nn.Module):
+    """
+    This combines a shared MLP and a MoE MLP, 
+    where the shared MLP is used for all tokens, 
+    and the MoE MLP is used for only a subset of tokens.
+
+    It halves the expansion_factor for each of the MLPs,
+    so we have a constant number of FLOPs per token.
+
+    It also includes a learned lambda weight for mixing
+    the outputs of the two MLPs.
+    """
+    def __init__(self, dim, num_experts=8, expansion_factor=4):
+        super().__init__()
+        self.halved_expansion_factor = expansion_factor // 2
+        self.shared_mlp = MLP(dim, self.halved_expansion_factor)
+        self.moe_mlp = MLPMoE(dim, num_experts, self.halved_expansion_factor)
+        self.lambda_weight = nn.Parameter(torch.tensor([0.5, 0.5]))
+
+    def forward(self, x, indices):
+        x_shared = self.shared_mlp(x, indices)
+        x_moe, indices = self.moe_mlp(x, indices)
+        x = self.lambda_weight[0] * x_shared + self.lambda_weight[1] * x_moe
+        return x, indices
+
 class Block(nn.Module):
-    def __init__(self, model_dim: int, num_heads: int, layer_idx: int):
+    def __init__(self, model_dim: int, num_heads: int, layer_idx: int, layer_type: str):
         super().__init__()
         # skip attention of blocks.7 (the 8th layer) by @YouJiacheng
         self.attn = CausalSelfAttention(model_dim, num_heads, layer_idx) if layer_idx != 7 else None
-        self.mlp = MLP(model_dim)
+
+        if layer_type == "mlp":
+            self.mlp = MLP(model_dim)
+        elif layer_type == "mlp_moe":
+            self.mlp = MLPMoE(model_dim)
+        elif layer_type == "moe_com":
+            self.mlp = MLPMoEComm(model_dim)
+        else:
+            raise ValueError(f"Invalid layer type: {layer_type}")
         self.lambdas = nn.Parameter(torch.tensor([1., 0.]))
 
-    def forward(self, x, ve, x0, block_mask):
+    def forward(self, x, ve, x0, block_mask, input_seq):
         x = self.lambdas[0] * x + self.lambdas[1] * x0
         if self.attn is not None:
             x = x + self.attn(norm(x), ve, block_mask)
-        x = x + self.mlp(norm(x))
+
+        x = x + self.mlp(norm(x), input_seq)
         return x
 
 class ValueEmbedding(nn.Module):
@@ -345,12 +421,17 @@ def next_multiple_of_n(v: float | int, *, n: int):
     return next(x for x in range(n, int(v) + 1 + n, n) if x >= v)
 
 class GPT(nn.Module):
-    def __init__(self, vocab_size: int, num_layers: int, num_heads: int, model_dim: int):
+    def __init__(self, vocab_size: int, num_layers: int, num_heads: int, model_dim: int, layer_definitions: list[str]):
         super().__init__()
+        self.layer_definitions = layer_definitions
         self.embed = nn.Embedding(vocab_size, model_dim)
         # token value embeddings by @KoszarskyB - inspired by @Grad62304977's value residual implementation following https://arxiv.org/abs/2410.17897
         self.value_embeds = ValueEmbedding(vocab_size, model_dim)
-        self.blocks = nn.ModuleList([Block(model_dim, num_heads, layer_idx) for layer_idx in range(num_layers)])
+        self.blocks = nn.ModuleList([
+            Block(model_dim, num_heads, layer_idx, layer_type=self.layer_definitions[layer_idx])
+            for layer_idx
+            in range(num_layers)
+        ])
         # U-net design by @brendanh0gan
         self.num_encoder_layers = num_layers // 2 # Half of the layers for encoder
         self.num_decoder_layers = num_layers - self.num_encoder_layers # Remaining for decoder
@@ -417,7 +498,7 @@ class GPT(nn.Module):
         # Encoder pass - process only the first half of the blocks
         block_masks = [long_bm, short_bm, short_bm, short_bm, long_bm, short_bm]
         for i in range(self.num_encoder_layers):
-            x = self.blocks[i](x, ve_enc[i], x0, block_masks[i])
+            x = self.blocks[i](x, ve_enc[i], x0, block_masks[i], input_seq)
             skip_connections.append(x)
         # Decoder pass - process the remaining blocks with weighted skip connections
         block_masks.reverse()
@@ -520,7 +601,8 @@ print0("="*100)
 # load data
 train_loader = distributed_data_generator(args.train_files, args.batch_size, rank, world_size)
 
-model = GPT(vocab_size=50257, num_layers=12, num_heads=6, model_dim=768).cuda()
+layer_definitions = ["mlp"] * 4 + ["mlp_moe"] + ["mlp"] * 2 + ["mlp_moe"] + ["mlp"] * 4
+model = GPT(vocab_size=50257, num_layers=12, num_heads=6, model_dim=768, layer_definitions=layer_definitions).cuda()
 for m in model.modules():
     if isinstance(m, nn.Embedding):
         m.bfloat16()
