@@ -595,8 +595,8 @@ print0("="*100)
 # load data
 train_loader = distributed_data_generator(args.train_files, args.batch_size, rank, world_size)
 
-layer_definitions = ["mlp"] * 4 + ["mlp_moe"] + ["mlp"] * 2 + ["mlp_moe"] + ["mlp"] * 4
-model = GPT(vocab_size=50257, num_layers=12, num_heads=6, model_dim=768, layer_definitions=layer_definitions).cuda()
+layer_defs = ["mlp"] * 4 + ["mlp_moe"] + ["mlp"] * 2 + ["mlp_moe"] + ["mlp"] * 4
+model = GPT(vocab_size=50257, num_layers=12, num_heads=6, model_dim=768, layer_definitions=layer_defs).cuda()
 for m in model.modules():
     if isinstance(m, nn.Embedding):
         m.bfloat16()
@@ -629,6 +629,9 @@ def sw_num_blks(window_size: int):
     return torch.tensor(window_size // 128, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
 
 model: nn.Module = model#torch.compile(model)
+
+# print model size
+print(f"Model size: {sum(p.numel() for p in model.parameters()}")
 training_time_ms = 0
 # start the clock
 torch.cuda.synchronize()
