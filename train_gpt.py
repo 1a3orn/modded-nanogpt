@@ -321,7 +321,7 @@ class MLPMoE(nn.Module):
     def forward(self, x, indices):
         # x shape: [batch_size, sequence_length, hidden_dim]
         # indices shape: [batch_size, sequence_length] containing expert assignments (0 to num_experts-1)
-    
+
         x_flat = x.view(-1, x.size(-1))
         # Combines batch and sequence dims:
         # [batch_size * sequence_length, hidden_dim]
@@ -332,26 +332,23 @@ class MLPMoE(nn.Module):
 
         # Count tokens per expert (avoids dynamic splits)
         expert_counts = torch.bincount(indices.view(-1), minlength=self.num_experts)
-
+        
         # Split sorted tokens into chunks for each expert
-        chunked_x = sorted_x.split(expert_counts.tolist())  # list of [count_i, c]
+        start_idx = 0
+        processed_chunks = []
+        for expert_idx, count in enumerate(expert_counts):
+            if count == 0:
+                continue
+            chunk = sorted_x[start_idx:start_idx + count]
+            processed_chunks.append(self.experts[expert_idx](chunk, indices))
+            start_idx += count
 
-        # Parallel process ALL experts (no loop!)
-        processed_chunks = [
-            expert(chunk, indices) for expert, chunk in zip(self.experts, chunked_x)
-            if chunk.size(0) > 0  # skip empty!
-        ]
-
-        # Rebuild full output in sorted order then undo permutation
-        output_flat = torch.zeros_like(sorted_x)
-        output_flat[sorted_indices] = torch.cat(processed_chunks)
-        #output_flat = torch.cat(processed_chunks)  # [b*s, c]
-        output = torch.empty_like(sorted_x)
-        output.scatter_(  # reverse the argsort: inject results to original positions
-            dim=0,
-            index=sorted_indices.unsqueeze(-1).expand(-1, x.size(-1)),
-            src=output_flat
-        )
+        # Concatenate all processed chunks
+        output_flat = torch.cat(processed_chunks)
+        
+        # Unsort the results back to original order
+        output = torch.empty_like(x_flat)
+        output[sorted_indices] = output_flat
 
         # Restore original shape [b, s, c]
         return output.view_as(x)
