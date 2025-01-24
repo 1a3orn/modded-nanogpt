@@ -614,7 +614,7 @@ for step in range(train_steps + 1):
         loss_sum += loss.item()
         loss_count += 1
         loss.backward()
-    if step % 10 == 0:
+    if step % 5 == 0:
         print(loss_sum / loss_count)
         wandb.log({"loss": loss_sum / loss_count})
         loss_sum = 0
