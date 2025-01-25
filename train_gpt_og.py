@@ -17,7 +17,7 @@ import torch.nn.functional as F
 import torch.distributed as dist
 # use of FlexAttention contributed by @KoszarskyB
 from torch.nn.attention.flex_attention import BlockMask, flex_attention
-torch._inductor.config.coordinate_descent_tuning = True # turn this off for a faster compile time (but slightly slower run)
+#torch._inductor.config.coordinate_descent_tuning = True # turn this off for a faster compile time (but slightly slower run)
 
 # -----------------------------------------------------------------------------
 # Custom operators : FP8 matmul for lm_head by @YouJiacheng
@@ -454,7 +454,7 @@ def distributed_data_generator(filename_pattern: str, batch_size: int, rank : in
 
 # -----------------------------------------------------------------------------
 # int main
-scale_factor = int(os.getenv("SCALE_FACTOR", '2'))
+scale_factor = int(os.getenv("SCALE_FACTOR", '4'))
 @dataclass
 class Hyperparameters:
     # data
@@ -546,7 +546,7 @@ schedulers = [torch.optim.lr_scheduler.LambdaLR(opt, get_lr) for opt in optimize
 def sw_num_blks(window_size: int):
     return torch.tensor(window_size // 128, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
 
-model: nn.Module = model#torch.compile(model)
+model: nn.Module = torch.compile(model)
 training_time_ms = 0
 # start the clock
 torch.cuda.synchronize()
