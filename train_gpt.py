@@ -357,7 +357,7 @@ class MLPMoEComm(nn.Module):
     It also includes a learned lambda weight for mixing
     the outputs of the two MLPs.
     """
-    def __init__(self, dim, num_experts=8, expansion_factor=4):
+    def __init__(self, dim, num_experts=4, expansion_factor=4):
         super().__init__()
         self.halved_expansion_factor = expansion_factor // 2
         self.shared_mlp = MLP(dim, self.halved_expansion_factor)
