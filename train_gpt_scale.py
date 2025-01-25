@@ -309,28 +309,29 @@ class Block(nn.Module):
         super().__init__()
         # skip attention of blocks.7 (the 8th layer) by @YouJiacheng
         if layer_idx in [0, 1]:
-            self.attn = nn.Sequential(
-                CausalSelfAttention(dim, num_heads, layer_idx),
-                CausalSelfAttention(dim, num_heads, layer_idx),
-            )
+            self.attn1 = CausalSelfAttention(dim, num_heads, layer_idx)
+            self.attn2 = CausalSelfAttention(dim, num_heads, layer_idx)
             self.mlp = nn.Identity()
         elif layer_idx in [10, 11]:
-            self.attn = nn.Identity()
+            self.attn1 = nn.Identity()
             self.mlp = nn.Sequential(
                 MLP(dim),
                 MLP(dim),
             )
         else:
-            self.attn = CausalSelfAttention(dim, num_heads, layer_idx)
+            self.attn1 = CausalSelfAttention(dim, num_heads, layer_idx)
             self.mlp = MLP(dim)
 
         self.lambdas = nn.Parameter(torch.tensor([1., 0.]))
 
     def forward(self, x, ve, x0, block_mask):
         x = self.lambdas[0] * x + self.lambdas[1] * x0
-        if self.attn is not None:
-            x = x + self.attn((norm(x), ve, block_mask))
-        x = x + self.mlp(norm(x))
+        if self.attn1 is not None:
+            x = x + self.attn1((norm(x), ve, block_mask))
+        if self.attn2 is not None:
+            x = x + self.attn2((norm(x), ve, block_mask))
+        if self.mlp is not None:
+            x = x + self.mlp(norm(x))
         return x
 
 class ValueEmbedding(nn.Module):
