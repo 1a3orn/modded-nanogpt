@@ -413,11 +413,13 @@ class GPT(nn.Module):
             x = self.blocks[i](x, ve_enc[i], x0, block_masks[i])
             skip_connections.append(x)
         # Decoder pass - process the remaining blocks with weighted skip connections
+        halfway = x
+        x = x - x0
         block_masks.reverse()
         for i in range(self.num_decoder_layers):
             x = x + self.skip_weights[i] * skip_connections.pop()
             x = self.blocks[self.num_encoder_layers + i](x, ve_dec[i], x0, block_masks[i])
-        x = x - x0
+        x = x - halfway
         x = norm(x)
         logits = lm_head_fp8(x, self.lm_head.weight) if self.training else self.lm_head(x)
         # @Grad62304977 added tanh softcapping following Gemma 2 paper, @KoszarskyB reduced it from 30 to 15, @YouJiacheng shifted it by +15 (2*sigmoid(2*x)=tanh(x)+1)
