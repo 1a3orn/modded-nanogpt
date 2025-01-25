@@ -376,7 +376,7 @@ class MLPMoE2(nn.Module):
 
         # Convert to one-hot encoding for expert selection
         one_hot = torch.zeros(E, x_flat.size(0), dtype=x.dtype, device=x.device)
-        one_hot.scatter_(0, expert_idx.unsqueeze(0), 1)
+        one_hot.scatter_(0, expert_idx.unsqueeze(0).to(torch.int64), 1)
         one_hot = one_hot.permute(1, 0).unsqueeze(-1)  # [B*T, E, 1]
 
         # Type cast weights
