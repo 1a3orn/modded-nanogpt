@@ -314,12 +314,14 @@ class Block(nn.Module):
             self.mlp = nn.Identity()
         elif layer_idx in [10, 11]:
             self.attn1 = nn.Identity()
+            self.attn2 = nn.Identity()
             self.mlp = nn.Sequential(
                 MLP(dim),
                 MLP(dim),
             )
         else:
             self.attn1 = CausalSelfAttention(dim, num_heads, layer_idx)
+            self.attn2 = nn.Identity()
             self.mlp = MLP(dim)
 
         self.lambdas = nn.Parameter(torch.tensor([1., 0.]))
