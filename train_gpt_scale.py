@@ -274,7 +274,8 @@ class CausalSelfAttention(nn.Module):
         # inspired by learnable scalars used by @brendanh0gan https://x.com/hi_tysam/status/1879693583898591283
         self.attn_scale = 0.12
 
-    def forward(self, x: Tensor, ve: Tensor | None, block_mask: BlockMask):
+    def forward(self, tpl):
+        x, ve, block_mask = tpl
         B, T = x.size(0), x.size(1) # batch size, sequence length
         assert B == 1, "Must use batch size = 1 for FlexAttention"
         q, k, v = F.linear(x, self.qkv_w.flatten(end_dim=1).type_as(x)).view(B, T, 3 * self.num_heads, self.head_dim).chunk(3, dim=-2)
@@ -328,7 +329,7 @@ class Block(nn.Module):
     def forward(self, x, ve, x0, block_mask):
         x = self.lambdas[0] * x + self.lambdas[1] * x0
         if self.attn is not None:
-            x = x + self.attn(norm(x), ve, block_mask)
+            x = x + self.attn((norm(x), ve, block_mask))
         x = x + self.mlp(norm(x))
         return x
 
