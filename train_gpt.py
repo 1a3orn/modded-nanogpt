@@ -366,9 +366,9 @@ class MLPMoEComm(nn.Module):
 
     def forward(self, x, indices):
         x_shared = self.shared_mlp(x, indices)
-        x_moe, indices = self.moe_mlp(x, indices)
+        x_moe = self.moe_mlp(x, indices)
         x = self.lambda_weight[0] * x_shared + self.lambda_weight[1] * x_moe
-        return x, indices
+        return x
 
 class Block(nn.Module):
     def __init__(self, model_dim: int, num_heads: int, layer_idx: int, layer_type: str):
