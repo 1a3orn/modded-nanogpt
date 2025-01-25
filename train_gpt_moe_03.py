@@ -1,6 +1,4 @@
-# 12 -> 10 layers
-# MLP -> MLPMoE for middle 6 layers
-
+import wandb
 import os
 import sys
 with open(sys.argv[0]) as f:
@@ -299,7 +297,7 @@ class MLP(nn.Module):
         if zero_init:
             self.c_proj.weight.detach().zero_() # zero init suggested by @Grad62304977
 
-    def forward(self, x, indices = None):
+    def forward(self, x, _indices = None):
         x = self.c_fc(x)
         x = F.relu(x).square() # https://arxiv.org/abs/2109.08668v2; ~1-2% better than GELU; suggested by @SKYLINEZ007 and @Grad62304977
         x = self.c_proj(x)
@@ -310,38 +308,63 @@ class MLPMoE(nn.Module):
         super().__init__()
         self.num_experts = num_experts
         self.experts = nn.ModuleList([MLP(dim, expansion_factor, zero_init=False) for _ in range(num_experts)])
+        # Simple linear router
+        self.router = nn.Linear(dim, num_experts)
 
-    def forward(self, x, indices):
-
+    def forward(self, x, _indices=None):  # _indices param kept for compatibility but unused
         batch_size, seq_len, hidden_dim = x.shape
         
-        # Reshape input and indices for expert routing
+        # Reshape input for routing
         x_reshaped = x.view(-1, hidden_dim)  # [b*t, c]
-        indices_flat = indices.view(-1)     # [b*t]
+        
+        # Get routing logits and select top expert
+        router_logits = self.router(x_reshaped)  # [b*t, num_experts]
+        expert_indices = router_logits.argmax(dim=-1)  # [b*t]
+        
         output = torch.zeros_like(x_reshaped)
-
-        expert_indices = indices_flat % self.num_experts
         
         # Process each expert's tokens
         for i in range(self.num_experts):
-            # Get masks for tokens routed to expert i in any of their routes
             mask = expert_indices == i
-            #print(f"Expert {i} has {mask.sum()} tokens")
             if mask.any():
-                # Process tokens through expert and accumulate the output
-                output[mask] = self.experts[i](x_reshaped[mask], expert_indices)
+                output[mask] = self.experts[i](x_reshaped[mask])
         
         # Reshape back to original dimensions
         output = output.view(batch_size, seq_len, hidden_dim)
         
         return output
 
+class MLPMoEComm(nn.Module):
+    def __init__(self, dim, num_experts=4, expansion_factor=4):
+        super().__init__()
+        self.expansion_factor = expansion_factor
+        self.shared_mlp = MLP(dim, self.halved_expansion_factor)
+        self.moe_mlp = MLPMoE(dim, num_experts, self.halved_expansion_factor)
+        self.lambda_gate = nn.Sequential(
+            nn.Linear(dim, 2),
+            nn.Softmax(dim=-1)
+        )
+        self.temperature = nn.Parameter(torch.ones(1))
+        
+    def forward(self, x, indices):
+        x_shared = self.shared_mlp(x, indices)
+        x_moe = self.moe_mlp(x, indices)
+        gate = self.lambda_gate(x / self.temperature)
+        x = gate[:, :, 0:1] * x_shared + gate[:, :, 1:2] * x_moe
+        return x
+
+
 class Block(nn.Module):
     def __init__(self, dim: int, num_heads: int, layer_idx: int):
         super().__init__()
         # skip attention of blocks.7 (the 8th layer) by @YouJiacheng
         self.attn = CausalSelfAttention(dim, num_heads, layer_idx) if layer_idx != 7 else None
-        self.mlp = MLP(dim)
+        if not [].includes(layer_idx):
+            print("Using shared MLP")
+            self.mlp = MLP(dim)
+        else:
+            print("Using MoE MLP")
+            self.mlp = MLPMoEComm(dim)
         self.lambdas = nn.Parameter(torch.tensor([1., 0.]))
 
     def forward(self, x, ve, x0, block_mask):
@@ -515,6 +538,9 @@ dist.init_process_group(backend="nccl", device_id=device)
 dist.barrier()
 master_process = (rank == 0) # this process will do logging, checkpointing etc.
 
+if master_process:
+    wandb.init(project="gpt-nano-expensive", config=args)
+
 # begin logging
 logfile = None
 if master_process:
@@ -576,7 +602,7 @@ schedulers = [torch.optim.lr_scheduler.LambdaLR(opt, get_lr) for opt in optimize
 def sw_num_blks(window_size: int):
     return torch.tensor(window_size // 128, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
 
-model: nn.Module = torch.compile(model)
+model: nn.Module = model#torch.compile(model)
 training_time_ms = 0
 # start the clock
 torch.cuda.synchronize()
@@ -631,8 +657,15 @@ for step in range(train_steps + 1):
 
     # --------------- TRAINING SECTION -----------------
     inputs, targets = next(train_loader)
+    loss_sum = 0
+    loss_count = 0
     for input_seq, target_seq in zip(inputs.split(args.seq_len), targets.split(args.seq_len)):
-        model(input_seq, target_seq, sw_num_blks(window_size)).backward()
+        loss = model(input_seq, target_seq, sw_num_blks(window_size))
+        loss.backward()
+        loss_sum += loss.item()
+        loss_count += 1
+    wandb.log({"loss": loss_sum / loss_count})
+
     for param in model.parameters():
         dist.all_reduce(param.grad, op=dist.ReduceOp.AVG)
     # momentum warmup for Muon
