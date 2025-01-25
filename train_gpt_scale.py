@@ -348,7 +348,7 @@ class GPT(nn.Module):
         self.num_encoder_layers = num_layers // 2 # Half of the layers for encoder
         self.num_decoder_layers = num_layers - self.num_encoder_layers # Remaining for decoder
         # Add learnable skip connection weights for decoder layers
-        self.skip_weights = nn.Parameter(torch.ones(self.num_decoder_layers))
+        self.skip_weights = nn.Parameter(torch.zeros(self.num_decoder_layers))
         # there are only 50257 unique GPT-2 tokens; we extend to nearest multiple of 128 for efficiency.
         # suggested to me by @Grad62304977. this originates from Karpathy's experiments.
         self.lm_head = CastedLinear(model_dim, next_multiple_of_n(vocab_size, n=128))
@@ -413,13 +413,10 @@ class GPT(nn.Module):
             x = self.blocks[i](x, ve_enc[i], x0, block_masks[i])
             skip_connections.append(x)
         # Decoder pass - process the remaining blocks with weighted skip connections
-        halfway = x
-        x = x - x0
         block_masks.reverse()
         for i in range(self.num_decoder_layers):
             x = x + self.skip_weights[i] * skip_connections.pop()
             x = self.blocks[self.num_encoder_layers + i](x, ve_dec[i], x0, block_masks[i])
-        x = x - halfway
         x = norm(x)
         logits = lm_head_fp8(x, self.lm_head.weight) if self.training else self.lm_head(x)
         # @Grad62304977 added tanh softcapping following Gemma 2 paper, @KoszarskyB reduced it from 30 to 15, @YouJiacheng shifted it by +15 (2*sigmoid(2*x)=tanh(x)+1)
