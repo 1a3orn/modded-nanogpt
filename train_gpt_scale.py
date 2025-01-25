@@ -269,7 +269,7 @@ class CausalSelfAttention(nn.Module):
         self.lambdas = nn.Parameter(torch.tensor([0.5, 0.5]))
         self.rotary = Rotary(head_dim)
         self.c_proj = CastedLinear(hdim, dim)
-        self.c_proj.weight.detach().zero_() # zero init suggested by @Grad62304977
+        # self.c_proj.weight.detach().zero_() # zero init suggested by @Grad62304977
         # scale the attention logits by given constant, instead of the default head_dim**-0.5, by @leloykun
         # inspired by learnable scalars used by @brendanh0gan https://x.com/hi_tysam/status/1879693583898591283
         self.attn_scale = 0.12
@@ -308,34 +308,18 @@ class Block(nn.Module):
     def __init__(self, dim: int, num_heads: int, layer_idx: int):
         super().__init__()
         # skip attention of blocks.7 (the 8th layer) by @YouJiacheng
-        if layer_idx in [0, 1]:
-            self.attn1 = CausalSelfAttention(dim, num_heads, layer_idx)
-            self.attn2 = CausalSelfAttention(dim, num_heads, layer_idx)
-            self.mlp = nn.Identity()
-        elif layer_idx in [11]:
-            self.attn1 = None #CausalSelfAttention(dim, num_heads, layer_idx)
-            self.attn2 = None
-            self.mlp = nn.Identity()
-        elif layer_idx in [10]:
-            self.attn1 = CausalSelfAttention(dim, num_heads, layer_idx)
-            self.attn2 = None
-            self.mlp = nn.Identity()
-        else:
-            self.attn1 = CausalSelfAttention(dim, num_heads, layer_idx)
-            self.attn2 = None
-            self.mlp = MLP(dim)
-
+                # skip attention of blocks.7 (the 8th layer) by @YouJiacheng
+        self.attn = CausalSelfAttention(dim, num_heads, layer_idx) if layer_idx != 7 else None
+        self.mlp = MLP(dim)
         self.lambdas = nn.Parameter(torch.tensor([1., 0.]))
 
     def forward(self, x, ve, x0, block_mask):
         x = self.lambdas[0] * x + self.lambdas[1] * x0
-        if self.attn1 is not None:
-            x = x + self.attn1((norm(x), ve, block_mask))
-        if self.attn2 is not None:
-            x = x + self.attn2((norm(x), ve, block_mask))
-        if self.mlp is not None:
-            x = x + self.mlp(norm(x))
+        if self.attn is not None:
+            x = x + self.attn(norm(x), ve, block_mask)
+        x = x + self.mlp(norm(x))
         return x
+
 
 class ValueEmbedding(nn.Module):
     def __init__(self, num_embeddings: int, embedding_dim: int):
