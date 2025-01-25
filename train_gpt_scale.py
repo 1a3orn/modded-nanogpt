@@ -308,16 +308,14 @@ class Block(nn.Module):
     def __init__(self, dim: int, num_heads: int, layer_idx: int):
         super().__init__()
         # skip attention of blocks.7 (the 8th layer) by @YouJiacheng
-        if layer_idx in [0]:
+        if layer_idx in [0, 1]:
             self.attn1 = CausalSelfAttention(dim, num_heads, layer_idx)
             self.attn2 = CausalSelfAttention(dim, num_heads, layer_idx)
             self.mlp = nn.Identity()
         elif layer_idx in [11]:
-            self.attn1 = None
-            self.attn2 = None
-            self.mlp = nn.Sequential(
-                MLP(dim),
-            )
+            self.attn1 = CausalSelfAttention(dim, num_heads, layer_idx)
+            #self.attn2 = None
+            self.mlp = nn.Identity()
         else:
             self.attn1 = CausalSelfAttention(dim, num_heads, layer_idx)
             self.attn2 = None
