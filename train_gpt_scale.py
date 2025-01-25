@@ -314,7 +314,7 @@ class Block(nn.Module):
             self.mlp = nn.Identity()
         elif layer_idx in [11]:
             self.attn1 = CausalSelfAttention(dim, num_heads, layer_idx)
-            #self.attn2 = None
+            self.attn2 = None
             self.mlp = nn.Identity()
         else:
             self.attn1 = CausalSelfAttention(dim, num_heads, layer_idx)
