@@ -397,7 +397,7 @@ class Block(nn.Module):
 class ValueEmbedding(nn.Module):
     def __init__(self, num_embeddings: int, embedding_dim: int):
         super().__init__()
-        self.embed = nn.ModuleList([nn.Embedding(num_embeddings, embedding_dim) for _ in range(3)])
+        self.embed = nn.ModuleList([nn.Embedding(num_embeddings, embedding_dim) for _ in range(2)])
 
     def forward(self, input_seq) -> list[Tensor | None]:
         ve = [emb(input_seq) for emb in self.embed]
