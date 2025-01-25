@@ -539,9 +539,6 @@ dist.init_process_group(backend="nccl", device_id=device)
 dist.barrier()
 master_process = (rank == 0) # this process will do logging, checkpointing etc.
 
-if master_process:
-    wandb.init(project="gpt-nano-expensive", config=args)
-
 # begin logging
 logfile = None
 if master_process:
@@ -604,6 +601,10 @@ def sw_num_blks(window_size: int):
     return torch.tensor(window_size // 128, dtype=torch.int32, pin_memory=True).cuda(non_blocking=True)
 
 model: nn.Module = torch.compile(model)
+
+if master_process:
+    wandb.init(project="gpt-nano-expensive", config=args)
+
 training_time_ms = 0
 # start the clock
 torch.cuda.synchronize()
