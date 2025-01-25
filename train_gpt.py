@@ -348,7 +348,7 @@ class MLPMoE(nn.Module):
 class MLPMoEComm(nn.Module):
     def __init__(self, dim, num_experts=4, expansion_factor=4):
         super().__init__()
-        self.halved_expansion_factor = expansion_factor
+        self.expansion_factor = expansion_factor
         self.shared_mlp = MLP(dim, self.halved_expansion_factor)
         self.moe_mlp = MLPMoE(dim, num_experts, self.halved_expansion_factor)
         self.lambda_gate = nn.Sequential(
