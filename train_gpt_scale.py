@@ -269,7 +269,7 @@ class CausalSelfAttention(nn.Module):
         self.lambdas = nn.Parameter(torch.tensor([0.5, 0.5]))
         self.rotary = Rotary(head_dim)
         self.c_proj = CastedLinear(hdim, dim)
-        # self.c_proj.weight.detach().zero_() # zero init suggested by @Grad62304977
+        self.c_proj.weight.detach().zero_() # zero init suggested by @Grad62304977
         # scale the attention logits by given constant, instead of the default head_dim**-0.5, by @leloykun
         # inspired by learnable scalars used by @brendanh0gan https://x.com/hi_tysam/status/1879693583898591283
         self.attn_scale = 0.12
@@ -314,9 +314,9 @@ class Block(nn.Module):
 
     def forward(self, x, ve, x0, block_mask):
         x = self.lambdas[0] * x + self.lambdas[1] * x0
-        x = x + self.mlp(norm(x))
         if self.attn is not None:
             x = x + self.attn(norm(x), ve, block_mask)
+        x = x + self.mlp(norm(x))
         return x
 
 
@@ -417,6 +417,7 @@ class GPT(nn.Module):
         for i in range(self.num_decoder_layers):
             x = x + self.skip_weights[i] * skip_connections.pop()
             x = self.blocks[self.num_encoder_layers + i](x, ve_dec[i], x0, block_masks[i])
+        x = x - x0
         x = norm(x)
         logits = lm_head_fp8(x, self.lm_head.weight) if self.training else self.lm_head(x)
         # @Grad62304977 added tanh softcapping following Gemma 2 paper, @KoszarskyB reduced it from 30 to 15, @YouJiacheng shifted it by +15 (2*sigmoid(2*x)=tanh(x)+1)
