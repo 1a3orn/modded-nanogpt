@@ -592,7 +592,7 @@ print0("="*100)
 # load data
 train_loader = distributed_data_generator(args.train_files, args.batch_size, rank, world_size)
 
-layer_defs = ["mlp"] * 4 + ["mlp_moe_com"] * 4 + ["mlp"] * 4
+layer_defs = ["mlp"] * 4 + ["moe_com"] * 4 + ["mlp"] * 4
 model = GPT(vocab_size=50257, num_layers=12, num_heads=6, model_dim=768, layer_definitions=layer_defs).cuda()
 for m in model.modules():
     if isinstance(m, nn.Embedding):
