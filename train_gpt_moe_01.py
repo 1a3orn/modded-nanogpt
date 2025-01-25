@@ -527,7 +527,7 @@ class Hyperparameters:
     # evaluation and logging
     val_loss_every = 125 # every how many steps to evaluate val loss? 0 for only at the end
     # implementation
-    seq_len = 64*1024 / scale_factor # FlexAttention sequence length
+    seq_len = 64*1024 // scale_factor # FlexAttention sequence length
     save_checkpoint = False
 args = Hyperparameters()
 
