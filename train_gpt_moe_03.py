@@ -336,7 +336,7 @@ class MLPMoE(nn.Module):
         return output
 
 class MLPMoEComm(nn.Module):
-    def __init__(self, dim, num_experts=4, expansion_factor=4):
+    def __init__(self, dim, num_experts=2, expansion_factor=4):
         super().__init__()
         self.expansion_factor = expansion_factor // 2
         self.shared_mlp = MLP(dim, self.expansion_factor)
