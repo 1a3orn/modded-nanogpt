@@ -234,19 +234,6 @@ class Muon(torch.optim.Optimizer):
 def norm(x):
     return F.rms_norm(x, (x.size(-1),))
 
-class CastedLinear(nn.Linear):
-    def __init__(self, in_features: int, out_features: int):
-        super().__init__(in_features, out_features, bias=False)
-
-    def reset_parameters(self) -> None:
-        std = 0.5 * (self.in_features ** -0.5) # 0.5 is a bit better than the default 1/sqrt(3)
-        bound = (3 ** 0.5) * std
-        with torch.no_grad():
-            self.weight.uniform_(-bound, bound)
-
-    def forward(self, x):
-        return F.linear(x, self.weight.type_as(x))
-
 class Rotary(nn.Module):
     def __init__(self, dim: int, max_seq_len=65536):
         super().__init__()
@@ -299,6 +286,19 @@ class CausalSelfAttention(nn.Module):
         y = self.c_proj(y)
         return y
 
+class CastedLinear(nn.Linear):
+    def __init__(self, in_features: int, out_features: int):
+        super().__init__(in_features, out_features, bias=False)
+
+    def reset_parameters(self) -> None:
+        std = 0.5 * (self.in_features ** -0.5) # 0.5 is a bit better than the default 1/sqrt(3)
+        bound = (3 ** 0.5) * std
+        with torch.no_grad():
+            self.weight.uniform_(-bound, bound)
+
+    def forward(self, x):
+        return F.linear(x, self.weight.type_as(x))
+
 class MLP(nn.Module):
     def __init__(self, dim, expansion_factor=4, zero_init=True):
         super().__init__()
@@ -345,6 +345,58 @@ class MLPMoE(nn.Module):
         
         return output
 
+class MLPMoE2(nn.Module):
+    def __init__(self, dim, num_experts=6, expansion_factor=4):
+        super().__init__()
+        self.dim = dim
+        self.num_experts = num_experts
+        self.expansion = expansion_factor
+
+        # Directly embed expert parameters in MoE layer
+        self.w1 = nn.Parameter(torch.randn(num_experts, dim, dim * expansion_factor))
+        self.w2 = nn.Parameter(torch.randn(num_experts, dim * expansion_factor, dim))
+
+        # Initialize parameters
+        for weight in [self.w1, self.w2]:
+            std = 0.5 * (dim ** -0.5)
+            bound = (3 ** 0.5) * std
+            nn.init.uniform_(weight, -bound, bound)
+
+        # Zero-initialize projection weights as in original MLP
+        with torch.no_grad():
+            self.w2.zero_()
+
+    def forward(self, x, indices):
+        B, T, C = x.shape
+        E = self.num_experts
+
+        # Flatten and determine expert assignments
+        x_flat = x.view(-1, C)  # [B*T, C]
+        expert_idx = (indices.view(-1) % E)  # [B*T]
+
+        # Convert to one-hot encoding for expert selection
+        one_hot = torch.zeros(E, x_flat.size(0), dtype=x.dtype, device=x.device)
+        one_hot.scatter_(0, expert_idx.unsqueeze(0), 1)
+        one_hot = one_hot.permute(1, 0).unsqueeze(-1)  # [B*T, E, 1]
+
+        # Type cast weights
+        dtype = x.dtype
+        w1 = self.w1.type(dtype)  # [E, C, 4C]
+        w2 = self.w2.type(dtype)  # [E, 4C, C]
+
+        # First layer: x @ w1[expert] through tensor contraction
+        x_expanded = torch.einsum('bi,ejk->beik', x_flat, w1)  # [B*T, E, 1, 4C]
+        x_fc = (x_expanded * one_hot).sum(dim=1).squeeze(1)  # [B*T, 4C]
+
+        # Activation function
+        x_act = F.relu(x_fc).square()
+
+        # Second layer: activated x @ w2[expert]
+        x_act_expanded = torch.einsum('bi,ejk->beik', x_act, w2)  # [B*T, E, 1, C]
+        x_out = (x_act_expanded * one_hot).sum(dim=1).squeeze(1)  # [B*T, C]
+
+        return x_out.view(B, T, C)
+
 class MLPMoEComm(nn.Module):
     """
     This combines a shared MLP and a MoE MLP, 
@@ -361,7 +413,7 @@ class MLPMoEComm(nn.Module):
         super().__init__()
         self.halved_expansion_factor = expansion_factor // 2
         self.shared_mlp = MLP(dim, self.halved_expansion_factor)
-        self.moe_mlp = MLPMoE(dim, num_experts, self.halved_expansion_factor)
+        self.moe_mlp = MLPMoE2(dim, num_experts, self.halved_expansion_factor)
         self.lambda_weight = nn.Parameter(torch.tensor([0.5, 0.5]))
 
     def forward(self, x, indices):
