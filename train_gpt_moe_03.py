@@ -347,7 +347,7 @@ class MLPMoEComm(nn.Module):
         )
         self.temperature = nn.Parameter(torch.ones(1))
         
-    def forward(self, x, indices):
+    def forward(self, x, indices = None):
         x_shared = self.shared_mlp(x, indices)
         x_moe = self.moe_mlp(x, indices)
         gate = self.lambda_gate(x / self.temperature)
@@ -368,11 +368,11 @@ class Block(nn.Module):
             self.mlp = MLPMoEComm(dim)
         self.lambdas = nn.Parameter(torch.tensor([1., 0.]))
 
-    def forward(self, x, ve, x0, block_mask):
+    def forward(self, x, ve, x0, block_mask, indices = None):
         x = self.lambdas[0] * x + self.lambdas[1] * x0
         if self.attn is not None:
             x = x + self.attn(norm(x), ve, block_mask)
-        x = x + self.mlp(norm(x))
+        x = x + self.mlp(norm(x), indices)
         return x
 
 class ValueEmbedding(nn.Module):
@@ -465,13 +465,13 @@ class GPT(nn.Module):
         # Encoder pass - process only the first half of the blocks
         block_masks = [long_bm, short_bm, short_bm, short_bm, long_bm, short_bm]
         for i in range(self.num_encoder_layers):
-            x = self.blocks[i](x, ve_enc[i], x0, block_masks[i])
+            x = self.blocks[i](x, ve_enc[i], x0, block_masks[i], indices=input_seq)
             skip_connections.append(x)
         # Decoder pass - process the remaining blocks with weighted skip connections
         block_masks.reverse()
         for i in range(self.num_decoder_layers):
             x = x + self.skip_weights[i] * skip_connections.pop()
-            x = self.blocks[self.num_encoder_layers + i](x, ve_dec[i], x0, block_masks[i])
+            x = self.blocks[self.num_encoder_layers + i](x, ve_dec[i], x0, block_masks[i], indices=input_seq)
         x = norm(x)
         logits = lm_head_fp8(x, self.lm_head.weight) if self.training else self.lm_head(x)
         # @Grad62304977 added tanh softcapping following Gemma 2 paper, @KoszarskyB reduced it from 30 to 15, @YouJiacheng shifted it by +15 (2*sigmoid(2*x)=tanh(x)+1)
