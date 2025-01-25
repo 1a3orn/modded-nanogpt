@@ -314,7 +314,7 @@ class MLP(nn.Module):
         return x
 
 class MLPMoE(nn.Module):
-    def __init__(self, dim, num_experts=32, expansion_factor=4):
+    def __init__(self, dim, num_experts=6, expansion_factor=4):
         super().__init__()
         self.num_experts = num_experts
         self.experts = nn.ModuleList([MLP(dim, expansion_factor, zero_init=False) for _ in range(num_experts)])
@@ -338,7 +338,7 @@ class MLPMoE(nn.Module):
             #print(f"Expert {i} has {mask.sum()} tokens")
             if mask.any():
                 # Process tokens through expert and accumulate the output
-                output[mask] = self.experts[i](x_reshaped[mask], indices)
+                output[mask] = self.experts[i](x_reshaped[mask], expert_indices)
         
         # Reshape back to original dimensions
         output = output.view(batch_size, seq_len, hidden_dim)
@@ -592,7 +592,7 @@ print0("="*100)
 # load data
 train_loader = distributed_data_generator(args.train_files, args.batch_size, rank, world_size)
 
-layer_defs = ["mlp"] * 4 + ["mlp_moe"] + ["mlp"] * 2 + ["mlp_moe"] + ["mlp"] * 4
+layer_defs = ["mlp"] * 4 + ["mlp_moe_comm"] * 4 + ["mlp"] * 4
 model = GPT(vocab_size=50257, num_layers=12, num_heads=6, model_dim=768, layer_definitions=layer_defs).cuda()
 for m in model.modules():
     if isinstance(m, nn.Embedding):
