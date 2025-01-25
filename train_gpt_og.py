@@ -454,7 +454,7 @@ def distributed_data_generator(filename_pattern: str, batch_size: int, rank : in
 
 # -----------------------------------------------------------------------------
 # int main
-
+scale_factor = int(os.getenv("SCALE_FACTOR", '2'))
 @dataclass
 class Hyperparameters:
     # data
@@ -468,7 +468,7 @@ class Hyperparameters:
     # evaluation and logging
     val_loss_every = 125 # every how many steps to evaluate val loss? 0 for only at the end
     # implementation
-    seq_len = 64*1024 # FlexAttention sequence length
+    seq_len = 64*1024 / scale_factor # FlexAttention sequence length
     save_checkpoint = False
 args = Hyperparameters()
 
