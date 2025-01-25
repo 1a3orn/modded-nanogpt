@@ -314,9 +314,9 @@ class Block(nn.Module):
 
     def forward(self, x, ve, x0, block_mask):
         x = self.lambdas[0] * x + self.lambdas[1] * x0
+        x = x + self.mlp(norm(x))
         if self.attn is not None:
             x = x + self.attn(norm(x), ve, block_mask)
-        x = x + self.mlp(norm(x))
         return x
 
 
