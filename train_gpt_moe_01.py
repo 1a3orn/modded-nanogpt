@@ -361,7 +361,7 @@ class Block(nn.Module):
         super().__init__()
         # skip attention of blocks.7 (the 8th layer) by @YouJiacheng
         self.attn = CausalSelfAttention(dim, num_heads, layer_idx) if layer_idx != 7 else None
-        if not [0, 1, 8, 9].includes(layer_idx):
+        if layer_idx not in [0, 1, 8, 9]:
             print("Using shared MLP")
             self.mlp = MLP(dim)
         else:
@@ -379,12 +379,12 @@ class Block(nn.Module):
 class ValueEmbedding(nn.Module):
     def __init__(self, num_embeddings: int, embedding_dim: int):
         super().__init__()
-        self.embed = nn.ModuleList([nn.Embedding(num_embeddings, embedding_dim) for _ in range(3)])
+        self.embed = nn.ModuleList([nn.Embedding(num_embeddings, embedding_dim) for _ in range(2)])
 
     def forward(self, input_seq) -> list[Tensor | None]:
         ve = [emb(input_seq) for emb in self.embed]
         # 012 ... 012 structure on token value embeddings by @YouJiacheng, improved on @leloykun's U-net structure
-        ve = [ve[0], ve[1], ve[2], None, None, None, None, None, None, ve[0], ve[1], ve[2]]
+        ve = [ve[0], ve[1], None, None, None, None, None, None, ve[0], ve[1]]
         return ve
 
 # -----------------------------------------------------------------------------
@@ -569,7 +569,7 @@ print0("="*100)
 # load data
 train_loader = distributed_data_generator(args.train_files, args.batch_size, rank, world_size)
 
-model = GPT(vocab_size=50257, num_layers=12, num_heads=6, model_dim=768).cuda()
+model = GPT(vocab_size=50257, num_layers=10, num_heads=6, model_dim=768).cuda()
 for m in model.modules():
     if isinstance(m, nn.Embedding):
         m.bfloat16()
