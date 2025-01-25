@@ -608,7 +608,8 @@ for step in range(train_steps + 1):
         loss.backward()
         loss_sum += loss.item()
         loss_count += 1
-    wandb.log({"loss": loss_sum / loss_count})
+    if master_process:
+        wandb.log({"loss": loss_sum / loss_count})
 
     for param in model.parameters():
         dist.all_reduce(param.grad, op=dist.ReduceOp.AVG)
