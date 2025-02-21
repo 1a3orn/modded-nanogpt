@@ -25,9 +25,10 @@ Contributors list (growing with each new record): [@bozavlado](https://x.com/boz
 
 To run the current record, run the following commands.
 ```bash
-git clone https://github.com/KellerJordan/modded-nanogpt.git && cd modded-nanogpt
+git clone https://github.com/1a3orn/modded-nanogpt.git && cd modded-nanogpt
 pip install -r requirements.txt
 pip install --pre torch==2.7.0.dev20250110+cu126 --index-url https://download.pytorch.org/whl/nightly/cu126 --upgrade
+wandb login
 python data/cached_fineweb10B.py 8 # downloads only the first 800M training tokens to save time
 ./run.sh
 ```
