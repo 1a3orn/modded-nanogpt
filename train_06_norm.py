@@ -221,8 +221,8 @@ class RMSNorm(nn.Module):
 
 class CastedLinear(nn.Linear):
     def __init__(self, in_features: int, out_features: int, use_fp8=False, x_s=1.0, w_s=1.0, grad_s=1.0):
-        super().__init__(in_features, out_features, bias=False)
         self.use_fp8 = use_fp8
+        super().__init__(in_features, out_features, bias=False)
         self.x_s = x_s
         self.w_s = w_s
         self.grad_s = grad_s
