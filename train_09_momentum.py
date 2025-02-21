@@ -475,7 +475,7 @@ if master_process:
     os.makedirs("logs", exist_ok=True)
     logfile = f"logs/{run_id}.txt"
     print(logfile)
-    wandb.init(project="nanogpt-base", config=args, experiment="09_momentum")
+    wandb.init(project="nanogpt-base", config=args, name="09_momentum")
 def print0(s, console=False):
     if master_process:
         with open(logfile, "a") as f:

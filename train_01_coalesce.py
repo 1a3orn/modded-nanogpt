@@ -619,11 +619,12 @@ for step in range(train_steps + 1):
     inputs, targets = next(train_loader)
     loss = model(inputs, targets, get_window_size_blocks(step))
     loss.backward()
-    wandb.log({
-        "loss": loss.item(),
-        "train_time": training_time_ms,
-        "step_avg": training_time_ms / max(step, 1)
-    })
+    if master_process:
+        wandb.log({
+            "loss": loss.item(),
+            "train_time": training_time_ms,
+            "step_avg": training_time_ms / max(step, 1)
+        })
     
     # Coalesce gradient all-reduces into single operation
     grads = [param.grad for param in model.parameters() if param.grad is not None]
