@@ -4,4 +4,4 @@ Default Model:
 
 Drop Both:
 - 140.5M parameters
-- 52504MiB /  81559MiB
+- 52504MiB /  81559MiB (??)

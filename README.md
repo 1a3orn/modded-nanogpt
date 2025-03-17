@@ -21,6 +21,22 @@ Contributors list (growing with each new record): [@bozavlado](https://x.com/boz
 
 ---
 
+Base:
+- 3.2785 - 179677ms
+- 3.2801 - 179607ms
+- 3.2824 - 179604ms
+- 3.2787 - 179563ms
+
+Smaller embed:
+- 3.2860 - 180154ms
+- 3.2885 - 179974ms
+- 3.2870 - 180024ms
+
+Mask ordering:
+- 3.2813 - 179640ms
+- 3.2796 - 179655ms
+
+
 ## Running the current record
 
 To run the current record, run the following commands.
