@@ -291,25 +291,60 @@ class MLP(nn.Module):
         self.c_proj = CastedLinear(hdim, dim)
         self.c_proj.weight.detach().zero_() # zero init suggested by @Grad62304977
 
-    def forward(self, x: Tensor):
+    def forward(self, x: Tensor, _indices: Tensor):
         x = self.c_fc(x)
         x = F.relu(x).square() # https://arxiv.org/abs/2109.08668v2; ~1-2% better than GELU; suggested by @SKYLINEZ007 and @Grad62304977
         x = self.c_proj(x)
         return x
+
+class MoE(nn.Module):
+    def __init__(self, dim: int, num_experts: int):
+        super().__init__()
+        self.experts = nn.ModuleList([MLP(dim) for _ in range(num_experts)])
+
+    def forward(self, x: Tensor, indices: Tensor):
+        # x: [batch, seq_len, dim]
+        # indices: [batch, seq_len] - contains expert indices for each token
+        
+        B, T, D = x.shape
+        x_flat = x.reshape(-1, D)  # [B*T, D]
+        indices_flat = indices.reshape(-1)  # [B*T]
+        
+        # Create a sparse matrix of shape [num_experts, B*T, D] where each row
+        # contains only the tokens for that expert
+        expert_mask = F.one_hot(indices_flat, num_classes=len(self.experts)).to(torch.bool)  # [B*T, num_experts]
+        expert_mask = expert_mask.T  # [num_experts, B*T]
+        
+        # Process all experts truly in parallel using vmap
+        def process_expert_tokens(expert, mask):
+            tokens = x_flat[mask]
+            if len(tokens) == 0:
+                return torch.zeros((0, D), device=x.device)
+            return expert(tokens)
+        
+        # Use vmap to process all experts in parallel
+        outputs = torch.vmap(process_expert_tokens)(self.experts, expert_mask)
+        
+        # Scatter the results back
+        out = torch.zeros_like(x_flat)
+        for i, mask in enumerate(expert_mask):
+            out[mask] = outputs[i]
+        
+        return out.reshape(B, T, D)
 
 class Block(nn.Module):
     def __init__(self, dim: int, num_heads: int, max_seq_len: int, layer_idx: int):
         super().__init__()
         # skip attention of blocks.7 (the 8th layer) by @YouJiacheng
         self.attn = CausalSelfAttention(dim, num_heads, max_seq_len) if layer_idx != 7 else None
-        self.mlp = MLP(dim)
+        self.mlp = MLP(dim) if layer_idx not in [3, 7] else MoE(dim, num_experts=8)
         self.lambdas = nn.Parameter(torch.tensor([1., 0.]))
 
-    def forward(self, x: Tensor, ve: Tensor | None, x0: Tensor, block_mask: BlockMask):
+    def forward(self, x: Tensor, ve: Tensor | None, x0: Tensor, block_mask: BlockMask, indices: Tensor):
         x = self.lambdas[0] * x + self.lambdas[1] * x0
         if self.attn is not None:
             x = x + self.attn(norm(x), ve, block_mask)
-        x = x + self.mlp(norm(x))
+        x = x + self.mlp(norm(x), indices)
         return x
 
 # -----------------------------------------------------------------------------
@@ -325,7 +360,7 @@ class GPT(nn.Module):
         self.smaller_embed = nn.Embedding(1, model_dim // 2)
         # token value embeddings by @KoszarskyB - inspired by @Grad62304977's value residual implementation following https://arxiv.org/abs/2410.17897
         # value embedding code simplification inspired by @ragulpr https://github.com/KellerJordan/modded-nanogpt/pull/78
-        self.value_embeds = nn.ModuleList([nn.Embedding(vocab_size, model_dim) for _ in range(3)])
+        # self.value_embeds = nn.ModuleList([nn.Embedding(vocab_size, model_dim) for _ in range(3)])
         self.blocks = nn.ModuleList([Block(model_dim, num_heads, max_seq_len, i) for i in range(num_layers)])
         # there are only 50257 unique GPT-2 tokens; we extend to nearest multiple of 128 for efficiency.
         # suggested to me by @Grad62304977. this originates from Karpathy's experiments.
@@ -379,14 +414,16 @@ class GPT(nn.Module):
     def forward(self, input_seq: Tensor, target_seq: Tensor, sliding_window_num_blocks: Tensor):
         assert input_seq.ndim == 1
 
-        ve = [value_embed(input_seq) for value_embed in self.value_embeds]
+        # ve = [value_embed(input_seq) for value_embed in self.value_embeds]
         # 012 ... 012 structure on token value embeddings by @YouJiacheng, improved on @leloykun's U-net structure
-        ve = [ve[0], ve[1], ve[2]] + [None] * (len(self.blocks) - 6) + [ve[0], ve[1], ve[2]]
+        ve = [None] * 12 # [ve[0], ve[1], ve[2]] + [None] * (len(self.blocks) - 6) + [ve[0], ve[1], ve[2]]
         assert len(ve) == len(self.blocks)
 
         long_bm, short_bm = self.create_blockmasks(input_seq, sliding_window_num_blocks)
         block_masks = [long_bm, short_bm, short_bm, short_bm, long_bm, short_bm, short_bm, long_bm, short_bm, short_bm, short_bm, long_bm]
         assert len(block_masks) == len(self.blocks)
+
+        indices = input_seq % 8
 
         x = x0 = norm(
             torch.cat([
@@ -401,7 +438,7 @@ class GPT(nn.Module):
         for i in range(len(self.blocks)):
             if i >= n:
                 x = x + self.skip_weights[i - n] * skip_connections.pop()
-            x = self.blocks[i](x, ve[i], x0, block_masks[i])
+            x = self.blocks[i](x, ve[i], x0, block_masks[i], indices)
             if i < n:
                 skip_connections.append(x)
 
@@ -481,7 +518,7 @@ if master_process:
     os.makedirs("logs", exist_ok=True)
     logfile = f"logs/{run_id}.txt"
     print(logfile)
-    wandb.init(project="nanogpt_experiment_02", config=args, name="01_embed_half")
+    wandb.init(project="nanogpt_experiment_02", config=args, name="06_moe_optim")
 def print0(s, console=False):
     if master_process:
         with open(logfile, "a") as f:

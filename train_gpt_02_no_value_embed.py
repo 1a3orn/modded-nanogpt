@@ -321,11 +321,10 @@ def next_multiple_of_n(v: float | int, *, n: int):
 class GPT(nn.Module):
     def __init__(self, vocab_size: int, num_layers: int, num_heads: int, model_dim: int, max_seq_len: int):
         super().__init__()
-        self.embed = nn.Embedding(vocab_size, model_dim // 2)
-        self.smaller_embed = nn.Embedding(1, model_dim // 2)
+        self.embed = nn.Embedding(vocab_size, model_dim)
         # token value embeddings by @KoszarskyB - inspired by @Grad62304977's value residual implementation following https://arxiv.org/abs/2410.17897
         # value embedding code simplification inspired by @ragulpr https://github.com/KellerJordan/modded-nanogpt/pull/78
-        self.value_embeds = nn.ModuleList([nn.Embedding(vocab_size, model_dim) for _ in range(3)])
+        # self.value_embeds = nn.ModuleList([nn.Embedding(vocab_size, model_dim) for _ in range(3)])
         self.blocks = nn.ModuleList([Block(model_dim, num_heads, max_seq_len, i) for i in range(num_layers)])
         # there are only 50257 unique GPT-2 tokens; we extend to nearest multiple of 128 for efficiency.
         # suggested to me by @Grad62304977. this originates from Karpathy's experiments.
@@ -379,21 +378,16 @@ class GPT(nn.Module):
     def forward(self, input_seq: Tensor, target_seq: Tensor, sliding_window_num_blocks: Tensor):
         assert input_seq.ndim == 1
 
-        ve = [value_embed(input_seq) for value_embed in self.value_embeds]
+        # ve = [value_embed(input_seq) for value_embed in self.value_embeds]
         # 012 ... 012 structure on token value embeddings by @YouJiacheng, improved on @leloykun's U-net structure
-        ve = [ve[0], ve[1], ve[2]] + [None] * (len(self.blocks) - 6) + [ve[0], ve[1], ve[2]]
+        ve = [None] * 12 # [ve[0], ve[1], ve[2]] + [None] * (len(self.blocks) - 6) + [ve[0], ve[1], ve[2]]
         assert len(ve) == len(self.blocks)
 
         long_bm, short_bm = self.create_blockmasks(input_seq, sliding_window_num_blocks)
         block_masks = [long_bm, short_bm, short_bm, short_bm, long_bm, short_bm, short_bm, long_bm, short_bm, short_bm, short_bm, long_bm]
         assert len(block_masks) == len(self.blocks)
 
-        x = x0 = norm(
-            torch.cat([
-                self.embed(input_seq)[None],
-                self.smaller_embed(torch.zeros_like(input_seq))[None]
-            ], dim=-1)
-        ) # use of norm here by @Grad62304977
+        x = x0 = norm(self.embed(input_seq)[None]) # use of norm here by @Grad62304977
 
         # U-net design by @brendanh0gan
         skip_connections = []
@@ -481,7 +475,7 @@ if master_process:
     os.makedirs("logs", exist_ok=True)
     logfile = f"logs/{run_id}.txt"
     print(logfile)
-    wandb.init(project="nanogpt_experiment_02", config=args, name="01_embed_half")
+    wandb.init(project="nanogpt_experiment_02", config=args, name="02_no_value_embed")
 def print0(s, console=False):
     if master_process:
         with open(logfile, "a") as f:
