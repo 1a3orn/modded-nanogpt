@@ -286,7 +286,7 @@ class CausalSelfAttention(nn.Module):
 class MLP(nn.Module):
     def __init__(self, dim: int):
         super().__init__()
-        hdim = 4 * dim
+        hdim = 2 * dim
         self.c_fc = CastedLinear(dim, hdim)
         self.c_proj = CastedLinear(hdim, dim)
         self.c_proj.weight.detach().zero_() # zero init suggested by @Grad62304977
@@ -449,7 +449,7 @@ class Hyperparameters:
     val_seq_len = 4*64*1024 # FlexAttention sequence length for validation
     # optimization
     num_iterations = 1770 # number of iterations to run
-    cooldown_frac = 0.5 # fraction of training spent cooling down the learning rate
+    cooldown_frac = 0.4 # fraction of training spent cooling down the learning rate
     # architecture
     vocab_size = 50257
     # evaluation and logging
@@ -537,7 +537,7 @@ def get_lr(step: int):
         return 1.0
     else:
         w = (1 - x) / args.cooldown_frac
-        return w * 1.0 + (1 - w) * 0.2
+        return w * 1.0 + (1 - w) * 0.1
 
 # attention window size schedule: linearly increase
 @lru_cache(1)
