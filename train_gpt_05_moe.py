@@ -338,7 +338,7 @@ class Block(nn.Module):
         super().__init__()
         # skip attention of blocks.7 (the 8th layer) by @YouJiacheng
         self.attn = CausalSelfAttention(dim, num_heads, max_seq_len) if layer_idx != 7 else None
-        self.mlp = MLP(dim) if layer_idx not in [4] else MoE(dim, num_experts=2)
+        self.mlp = MLP(dim) if layer_idx not in [] else MoE(dim, num_experts=2)
         self.lambdas = nn.Parameter(torch.tensor([1., 0.]))
 
     def forward(self, x: Tensor, ve: Tensor | None, x0: Tensor, block_mask: BlockMask, indices: Tensor):
