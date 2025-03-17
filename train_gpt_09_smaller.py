@@ -287,9 +287,9 @@ class MLP(nn.Module):
     def __init__(self, dim: int, layer_idx: int):
         super().__init__()
         if layer_idx % 2 == 0:
-            hdim = next_multiple_of_n(int(4 * dim), n=64)
-        else:
             hdim = next_multiple_of_n(int(1 * dim), n=64)
+        else:
+            hdim = next_multiple_of_n(int(4 * dim), n=64)
         self.c_fc = CastedLinear(dim, hdim)
         self.c_proj = CastedLinear(hdim, dim)
         self.c_proj.weight.detach().zero_() # zero init suggested by @Grad62304977
