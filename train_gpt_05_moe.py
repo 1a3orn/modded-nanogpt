@@ -338,7 +338,7 @@ class Block(nn.Module):
         super().__init__()
         # skip attention of blocks.7 (the 8th layer) by @YouJiacheng
         self.attn = CausalSelfAttention(dim, num_heads, max_seq_len) if layer_idx != 7 else None
-        self.mlp = MLP(dim) if layer_idx not in [3, 7] else MoE(dim, num_experts=8)
+        self.mlp = MLP(dim) if layer_idx not in [3, 7] else MoE(dim, num_experts=4)
         self.lambdas = nn.Parameter(torch.tensor([1., 0.]))
 
     def forward(self, x: Tensor, ve: Tensor | None, x0: Tensor, block_mask: BlockMask, indices: Tensor):
@@ -424,7 +424,7 @@ class GPT(nn.Module):
         block_masks = [long_bm, short_bm, short_bm, short_bm, long_bm, short_bm, short_bm, long_bm, short_bm, short_bm, short_bm, long_bm]
         assert len(block_masks) == len(self.blocks)
 
-        indices = (input_seq % 8).to(torch.long)
+        indices = (input_seq % 4).to(torch.long)
 
         x = x0 = norm(
             torch.cat([
