@@ -424,7 +424,7 @@ class GPT(nn.Module):
         block_masks = [long_bm, short_bm, short_bm, short_bm, long_bm, short_bm, short_bm, long_bm, short_bm, short_bm, short_bm, long_bm]
         assert len(block_masks) == len(self.blocks)
 
-        indices = input_seq % 8
+        indices = (input_seq % 8).to(torch.long)
 
         x = x0 = norm(
             torch.cat([
