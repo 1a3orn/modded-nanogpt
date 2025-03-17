@@ -313,12 +313,13 @@ class MoE(nn.Module):
         out = torch.zeros_like(x_flat)
         for expert_idx in range(self.num_experts):
             # Create mask for this expert's tokens
-            mask = (indices.view(-1) == expert_idx)
-            if mask.any():
-                # Process tokens through expert
-                expert_output = self.experts[expert_idx](x_flat[mask])
-                # Place results back using mask
-                out[mask] = expert_output
+            expert_mask = (indices.view(-1) == expert_idx)
+            # Create a full-size tensor for this expert's output
+            expert_input = x_flat * expert_mask.unsqueeze(-1)  # Broadcast mask across dim
+            # Process through expert
+            expert_output = self.experts[expert_idx](expert_input)
+            # Add to output (masked)
+            out += expert_output * expert_mask.unsqueeze(-1)
 
         return out.view(B, T, D)
 
