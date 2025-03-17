@@ -291,7 +291,7 @@ class MLP(nn.Module):
         self.c_proj = CastedLinear(hdim, dim)
         self.c_proj.weight.detach().zero_() # zero init suggested by @Grad62304977
 
-    def forward(self, x: Tensor, _indices: Tensor):
+    def forward(self, x: Tensor, _indices: Tensor | None = None):
         x = self.c_fc(x)
         x = F.relu(x).square() # https://arxiv.org/abs/2109.08668v2; ~1-2% better than GELU; suggested by @SKYLINEZ007 and @Grad62304977
         x = self.c_proj(x)
