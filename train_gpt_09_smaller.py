@@ -284,9 +284,12 @@ class CausalSelfAttention(nn.Module):
         return y
 
 class MLP(nn.Module):
-    def __init__(self, dim: int):
+    def __init__(self, dim: int, layer_idx: int):
         super().__init__()
-        hdim = next_multiple_of_n(int(2 * dim), n=64)
+        if layer_idx % 2 == 0:
+            hdim = next_multiple_of_n(int(4 * dim), n=64)
+        else:
+            hdim = next_multiple_of_n(int(1 * dim), n=64)
         self.c_fc = CastedLinear(dim, hdim)
         self.c_proj = CastedLinear(hdim, dim)
         self.c_proj.weight.detach().zero_() # zero init suggested by @Grad62304977
@@ -302,7 +305,7 @@ class Block(nn.Module):
         super().__init__()
         # skip attention of blocks.7 (the 8th layer) by @YouJiacheng
         self.attn = CausalSelfAttention(dim, num_heads, max_seq_len) if layer_idx != 7 else None
-        self.mlp = MLP(dim)
+        self.mlp = MLP(dim, layer_idx)
         self.lambdas = nn.Parameter(torch.tensor([1., 0.]))
 
     def forward(self, x: Tensor, ve: Tensor | None, x0: Tensor, block_mask: BlockMask):
