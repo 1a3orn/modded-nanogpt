@@ -475,7 +475,7 @@ if master_process:
     os.makedirs("logs", exist_ok=True)
     logfile = f"logs/{run_id}.txt"
     print(logfile)
-    wandb.init(project="nanogpt_experiment", config=args, name="base")
+    wandb.init(project="nanogpt_experiment_02", config=args, name="base")
 def print0(s, console=False):
     if master_process:
         with open(logfile, "a") as f:
@@ -506,6 +506,11 @@ for m in model.modules():
         m.bfloat16()
 for param in model.parameters():
     dist.broadcast(param.detach(), 0)
+
+if master_process:
+    num_params = sum(p.numel() for p in model.parameters())
+    print0(f"number of parameters: {num_params/1e6:.1f}M", console=True)
+
 
 # collect the parameters to optimize
 hidden_matrix_params = [p for n, p in model.blocks.named_parameters() if p.ndim >= 2 and "embed" not in n]

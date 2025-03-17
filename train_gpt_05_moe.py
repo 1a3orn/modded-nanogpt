@@ -551,6 +551,10 @@ for m in model.modules():
 for param in model.parameters():
     dist.broadcast(param.detach(), 0)
 
+if master_process:
+    num_params = sum(p.numel() for p in model.parameters())
+    print0(f"number of parameters: {num_params/1e6:.1f}M", console=True)
+
 # collect the parameters to optimize
 hidden_matrix_params = [p for n, p in model.blocks.named_parameters() if p.ndim >= 2 and "embed" not in n]
 embed_params = [p for n, p in model.named_parameters() if "embed" in n]
