@@ -291,7 +291,7 @@ class MLP(nn.Module):
         self.c_proj = CastedLinear(hdim, dim)
         self.c_proj.weight.detach().zero_() # zero init suggested by @Grad62304977
 
-    def forward(self, x: Tensor, _indices: Tensor | None = None):
+    def forward(self, x: Tensor):
         x = self.c_fc(x)
         x = F.relu(x).square() # https://arxiv.org/abs/2109.08668v2; ~1-2% better than GELU; suggested by @SKYLINEZ007 and @Grad62304977
         x = self.c_proj(x)
@@ -345,7 +345,10 @@ class Block(nn.Module):
         x = self.lambdas[0] * x + self.lambdas[1] * x0
         if self.attn is not None:
             x = x + self.attn(norm(x), ve, block_mask)
-        x = x + self.mlp(norm(x), indices)
+        if isinstance(self.mlp, MoE):
+            x = x + self.mlp(norm(x), indices)
+        else:
+            x = x + self.mlp(norm(x))
         return x
 
 # -----------------------------------------------------------------------------
