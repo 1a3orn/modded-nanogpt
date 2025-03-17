@@ -301,41 +301,25 @@ class MoE(nn.Module):
     def __init__(self, dim: int, num_experts: int):
         super().__init__()
         self.experts = nn.ModuleList([MLP(dim) for _ in range(num_experts)])
+        self.num_experts = num_experts
 
     def forward(self, x: Tensor, indices: Tensor):
         # x: [batch, seq_len, dim]
         # indices: [batch, seq_len] - contains expert indices for each token
-        
         B, T, D = x.shape
         x_flat = x.view(-1, D)  # [B*T, D]
-        indices_flat = indices.view(-1)  # [B*T]
         
-        # Process each expert's tokens and accumulate results
-        outputs = []
-        output_indices = []
-        
-        for expert_idx in range(len(self.experts)):
-            mask = (indices_flat == expert_idx)
-            if not mask.any():
-                continue
-                
-            expert_tokens = x_flat[mask]
-            expert_output = self.experts[expert_idx](expert_tokens)
-            
-            outputs.append(expert_output)
-            output_indices.append(mask.nonzero().squeeze(-1))
-        
-        # Combine results efficiently
-        if not outputs:  # Handle case where no experts were used
-            return torch.zeros_like(x)
-            
-        all_outputs = torch.cat(outputs, dim=0)
-        all_indices = torch.cat(output_indices, dim=0)
-        
-        # Create output tensor and fill it
+        # Process all tokens through each expert and combine with masks
         out = torch.zeros_like(x_flat)
-        out[all_indices] = all_outputs
-        
+        for expert_idx in range(self.num_experts):
+            # Create mask for this expert's tokens
+            mask = (indices.view(-1) == expert_idx)
+            if mask.any():
+                # Process tokens through expert
+                expert_output = self.experts[expert_idx](x_flat[mask])
+                # Place results back using mask
+                out[mask] = expert_output
+
         return out.view(B, T, D)
 
 class Block(nn.Module):
