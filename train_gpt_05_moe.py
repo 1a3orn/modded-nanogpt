@@ -306,32 +306,37 @@ class MoE(nn.Module):
         # x: [batch, seq_len, dim]
         # indices: [batch, seq_len] - contains expert indices for each token
         
-        # Flatten batch and sequence dimensions
         B, T, D = x.shape
-        x_flat = x.reshape(-1, D)  # [B*T, D]
-        indices_flat = indices.reshape(-1)  # [B*T]
+        x_flat = x.view(-1, D)  # [B*T, D]
+        indices_flat = indices.view(-1)  # [B*T]
         
-        # Create output tensor
-        out = torch.zeros_like(x_flat)  # [B*T, D]
+        # Process each expert's tokens and accumulate results
+        outputs = []
+        output_indices = []
         
-        # Process each expert's tokens in parallel
         for expert_idx in range(len(self.experts)):
-            # Find which tokens go to this expert
             mask = (indices_flat == expert_idx)
             if not mask.any():
                 continue
+                
+            expert_tokens = x_flat[mask]
+            expert_output = self.experts[expert_idx](expert_tokens)
             
-            # Get tokens for this expert
-            expert_tokens = x_flat[mask]  # [num_tokens_for_expert, D]
-            
-            # Process tokens through expert
-            expert_output = self.experts[expert_idx](expert_tokens)  # [num_tokens_for_expert, D]
-            
-            # Place results back in output tensor
-            out[mask] = expert_output
+            outputs.append(expert_output)
+            output_indices.append(mask.nonzero().squeeze(-1))
         
-        # Reshape back to original dimensions
-        return out.reshape(B, T, D)
+        # Combine results efficiently
+        if not outputs:  # Handle case where no experts were used
+            return torch.zeros_like(x)
+            
+        all_outputs = torch.cat(outputs, dim=0)
+        all_indices = torch.cat(output_indices, dim=0)
+        
+        # Create output tensor and fill it
+        out = torch.zeros_like(x_flat)
+        out[all_indices] = all_outputs
+        
+        return out.view(B, T, D)
 
 class Block(nn.Module):
     def __init__(self, dim: int, num_heads: int, max_seq_len: int, layer_idx: int):
