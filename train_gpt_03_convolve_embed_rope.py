@@ -381,8 +381,8 @@ class ConvEmbedding(nn.Module):
     def forward(self, x):        
         # Get token embeddings: [T] -> [T, C]
         embeddings = self.token_embedding(x)
-        out = self.conv_head(embeddings.transpose(-2, -1)).transpose(-2, -1)
-        out = out[:embeddings.shape[0],:]
+        #out = self.conv_head(embeddings.transpose(-2, -1)).transpose(-2, -1)
+        #out = out[:embeddings.shape[0],:]
         return self.layer_norm_head(embeddings)
 
 
