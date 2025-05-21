@@ -524,19 +524,11 @@ if master_process:
     os.makedirs("logs", exist_ok=True)
     logfile = f"logs/{run_id}.txt"
     print(logfile)
-    try:
-        # Check if WANDB_API_KEY is set
-        if "WANDB_API_KEY" not in os.environ:
-            raise ValueError("WANDB_API_KEY environment variable is not set")
-            
-        # Try to initialize wandb
-        wandb_run = wandb.init(project="nanogpt_experiment_03", config=args, name="convolve_embed_no_rope")
-        if wandb_run is None:
-            raise RuntimeError("Failed to initialize wandb run")
-            
-    except Exception as e:
-        print(f"Error initializing wandb: {str(e)}")
-        raise  # Re-raise the exception to stop execution
+    print("WANDB_API_KEY: ", os.environ["WANDB_API_KEY"])
+    rt = wandb.init(project="nanogpt_experiment_03", config=args, name="convolve_embed_no_rope")
+    if rt is None:
+        print("Failed to initialize wandb")
+        exit()
 def print0(s, console=False):
     if master_process:
         with open(logfile, "a") as f:

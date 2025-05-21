@@ -21,6 +21,7 @@ import torch.distributed as dist
 from torch.nn.attention.flex_attention import BlockMask, flex_attention
 #torch._inductor.config.coordinate_descent_tuning = True # we have banned this flag for new records because it causes compilation to take 30min
 
+wandb.login(key=os.environ["WANDB_API_KEY"])
 # -----------------------------------------------------------------------------
 # Custom operators: FP8 matmul by @YouJiacheng
 
@@ -475,7 +476,11 @@ if master_process:
     os.makedirs("logs", exist_ok=True)
     logfile = f"logs/{run_id}.txt"
     print(logfile)
-    wandb.init(project="nanogpt_experiment_03", config=args, name="no_rope")
+    print("WANDB_API_KEY: ", os.environ["WANDB_API_KEY"])
+    rt = wandb.init(project="nanogpt_experiment_03", config=args, name="no_rope")
+    if rt is None:
+        print("Failed to initialize wandb")
+        exit()
 def print0(s, console=False):
     if master_process:
         with open(logfile, "a") as f:
