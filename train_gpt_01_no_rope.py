@@ -180,29 +180,45 @@ class Muon(torch.optim.Optimizer):
             handle = None
             params_world = None
             def update_prev(): # optimized Muon implementation contributed by @YouJiacheng
-                handle.wait()
+                if handle is not None:
+                    handle.wait()
                 for p_world, g_world in zip(params_world, update_buffer_views):
                     p_world.add_(g_world.view_as(p_world),
                                  alpha=-group["lr"] * max(1, p_world.size(-2) / p_world.size(-1))**0.5)
-            for base_i in range(len(params))[::self.world_size]:
-                if base_i + self.rank < len(params):
-                    p = params[base_i + self.rank]
-                    g = p.grad
-                    assert g is not None
-                    state = self.state[p]
-                    if "momentum_buffer" not in state:
-                        state["momentum_buffer"] = torch.zeros_like(g)
-                    buf: Tensor = state["momentum_buffer"]
-                    buf.lerp_(g, 1 - group["momentum"])
-                    g = g.lerp_(buf, group["momentum"]) if group["nesterov"] else buf
-                    g = zeropower_via_newtonschulz5(g, steps=group["ns_steps"]).flatten()
-                else:
-                    g = update_buffer_views[self.rank]
-                if base_i > 0:
-                    update_prev() # async all_gather instead of sync all_reduce by @YouJiacheng
-                handle = dist.all_gather_into_tensor(update_buffer, g, async_op=True)
-                params_world = params[base_i : base_i + self.world_size]
-            update_prev()
+            try:
+                for base_i in range(len(params))[::self.world_size]:
+                    if base_i + self.rank < len(params):
+                        p = params[base_i + self.rank]
+                        g = p.grad
+                        assert g is not None
+                        state = self.state[p]
+                        if "momentum_buffer" not in state:
+                            state["momentum_buffer"] = torch.zeros_like(g)
+                        buf: Tensor = state["momentum_buffer"]
+                        buf.lerp_(g, 1 - group["momentum"])
+                        g = g.lerp_(buf, group["momentum"]) if group["nesterov"] else buf
+                        g = zeropower_via_newtonschulz5(g, steps=group["ns_steps"]).flatten()
+                    else:
+                        g = update_buffer_views[self.rank]
+                    if base_i > 0:
+                        update_prev() # async all_gather instead of sync all_reduce by @YouJiacheng
+                    try:
+                        handle = dist.all_gather_into_tensor(update_buffer, g, async_op=True)
+                    except NotImplementedError as e:
+                        # Fallback to synchronous all_gather if async is not supported
+                        dist.all_gather_into_tensor(update_buffer, g, async_op=False)
+                        handle = None
+                    params_world = params[base_i : base_i + self.world_size]
+                update_prev()
+            except Exception as e:
+                print(f"Error in Muon optimizer step: {str(e)}")
+                # Ensure we clean up any pending operations
+                if handle is not None:
+                    try:
+                        handle.wait()
+                    except:
+                        pass
+                raise
 
 # -----------------------------------------------------------------------------
 # PyTorch nn.Module definitions for the model
