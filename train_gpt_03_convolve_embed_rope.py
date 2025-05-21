@@ -372,11 +372,11 @@ class ConvEmbedding(nn.Module):
         
     def _init_weights(self):
         nn.init.normal_(self.token_embedding.weight, mean=0, std=self.embedding_dim ** -0.5)
-        nn.init.xavier_uniform_(self.conv_head.weight)
-        nn.init.zeros_(self.conv_head.bias)
+        #nn.init.xavier_uniform_(self.conv_head.weight)
+        #nn.init.zeros_(self.conv_head.bias)
         # Convert both weights and bias to bfloat16 to match input type
-        self.conv_head.weight.data = self.conv_head.weight.data.to(torch.bfloat16)
-        self.conv_head.bias.data = self.conv_head.bias.data.to(torch.bfloat16)
+        #self.conv_head.weight.data = self.conv_head.weight.data.to(torch.bfloat16)
+        #self.conv_head.bias.data = self.conv_head.bias.data.to(torch.bfloat16)
 
     def forward(self, x):        
         # Get token embeddings: [T] -> [T, C]
