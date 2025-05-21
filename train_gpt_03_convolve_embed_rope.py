@@ -599,7 +599,7 @@ head_params = [model.lm_head.weight]
 # init the optimizer(s)
 adam_params = [
     dict(params=head_params, lr=0.22),
-    dict(params=embed_params, lr=0.04),
+    dict(params=embed_params, lr=0.05),
     dict(params=scalar_params, lr=0.04)
 ]
 # small adam epsilon by @YouJiacheng. this is an alternate method of fixing the world_size dependence
