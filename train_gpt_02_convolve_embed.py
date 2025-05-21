@@ -376,9 +376,9 @@ class ConvEmbedding(nn.Module):
         nn.init.zeros_(self.conv.bias)
 
     def forward(self, x):        
-        # Get token embeddings: [B, T] -> [B, T, C]
+        # Get token embeddings: [T] -> [T, C]
         embeddings = self.token_embedding(x)
-        out = self.conv(embeddings.transpose(1,2)).transpose(1,2)
+        out = self.conv(embeddings.transpose(-2, -1)).transpose(-2, -1)
         out = out[:,:embeddings.shape[1],:]
         return self.layer_norm(out.contiguous())
 
