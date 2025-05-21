@@ -582,8 +582,11 @@ if master_process:
 
 
 # collect the parameters to optimize
-hidden_matrix_params = [p for n, p in model.blocks.named_parameters() if p.ndim >= 2 and "embed" not in n]
-embed_params = [p for n, p in model.named_parameters() if "embed" in n]
+def is_embed(n: str):
+    return "embed" in n and "conv" not in n and "layer_norm" not in n
+
+hidden_matrix_params = [p for n, p in model.blocks.named_parameters() if p.ndim >= 2 and not is_embed(n)]
+embed_params = [p for n, p in model.named_parameters() if is_embed(n)]
 print("Length embed_params: ", len(embed_params))
 print("embed_params: ", embed_params)
 scalar_params = [p for p in model.parameters() if p.ndim < 2]
