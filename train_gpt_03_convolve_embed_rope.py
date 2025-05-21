@@ -383,7 +383,7 @@ class ConvEmbedding(nn.Module):
         embeddings = self.token_embedding(x)
         out = self.conv_head(embeddings.transpose(-2, -1)).transpose(-2, -1)
         out = out[:embeddings.shape[0],:]
-        return self.layer_norm_head(out.contiguous())
+        return self.layer_norm_head(embeddings)
 
 
 class GPT(nn.Module):
