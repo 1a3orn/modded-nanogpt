@@ -358,10 +358,10 @@ class ConvEmbedding(nn.Module):
             num_embeddings=self.vocab_size,
             embedding_dim=self.embedding_dim,
         )
-        self.layer_norm = nn.LayerNorm([self.embedding_dim])
+        self.layer_norm_head = nn.LayerNorm([self.embedding_dim])
 
         # Create separate convolutions for each group of channels
-        self.conv = nn.Conv1d(
+        self.conv_head = nn.Conv1d(
             in_channels=self.embedding_dim,
             out_channels=self.embedding_dim,
             kernel_size=self.conv_length,
@@ -381,9 +381,9 @@ class ConvEmbedding(nn.Module):
     def forward(self, x):        
         # Get token embeddings: [T] -> [T, C]
         embeddings = self.token_embedding(x)
-        out = self.conv(embeddings.transpose(-2, -1)).transpose(-2, -1)
+        out = self.conv_head(embeddings.transpose(-2, -1)).transpose(-2, -1)
         out = out[:embeddings.shape[0],:]
-        return self.layer_norm(out.contiguous())
+        return self.layer_norm_head(out.contiguous())
 
 
 class GPT(nn.Module):
@@ -589,14 +589,14 @@ def is_embed(n: str):
     return "embed" in n and "conv" not in n and "layer_norm" not in n
 
 def is_head_embed(n: str):
-    return "token_embedding" in n
+    return "token_embedding" in n or "conv_head" in n or "layer_norm_head" in n
 
 hidden_matrix_params = [p for n, p in model.blocks.named_parameters() if p.ndim >= 2 and not is_embed(n) and not is_head_embed(n)]
 embed_params = [p for n, p in model.named_parameters() if is_embed(n) and not is_head_embed(n)]
 head_embed_params = [p for n, p in model.lm_head.named_parameters() if is_head_embed(n)]
 print("Length embed_params: ", len(embed_params))
 # print the names of the embed_params
-print("embed_params names: ", [n for n, p in model.named_parameters() if is_embed(n)])
+print("embed_params names: ", [n for n, p in model.named_parameters() if is_embed(n) and not is_head_embed(n)])
 scalar_params = [p for p in model.parameters() if p.ndim < 2]
 head_params = [model.lm_head.weight]
 
