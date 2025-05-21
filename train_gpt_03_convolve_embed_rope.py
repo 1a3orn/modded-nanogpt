@@ -588,8 +588,12 @@ if master_process:
 def is_embed(n: str):
     return "embed" in n and "conv" not in n and "layer_norm" not in n
 
-hidden_matrix_params = [p for n, p in model.blocks.named_parameters() if p.ndim >= 2 and not is_embed(n)]
-embed_params = [p for n, p in model.named_parameters() if is_embed(n)]
+def is_head_embed(n: str):
+    return "token_embedding" in n
+
+hidden_matrix_params = [p for n, p in model.blocks.named_parameters() if p.ndim >= 2 and not is_embed(n) and not is_head_embed(n)]
+embed_params = [p for n, p in model.named_parameters() if is_embed(n) and not is_head_embed(n)]
+head_embed_params = [p for n, p in model.lm_head.named_parameters() if is_head_embed(n)]
 print("Length embed_params: ", len(embed_params))
 # print the names of the embed_params
 print("embed_params names: ", [n for n, p in model.named_parameters() if is_embed(n)])
@@ -599,7 +603,8 @@ head_params = [model.lm_head.weight]
 # init the optimizer(s)
 adam_params = [
     dict(params=head_params, lr=0.22),
-    dict(params=embed_params, lr=0.05),
+    dict(params=embed_params, lr=0.6),
+    dict(params=head_embed_params, lr=0.22),
     dict(params=scalar_params, lr=0.04)
 ]
 # small adam epsilon by @YouJiacheng. this is an alternate method of fixing the world_size dependence
