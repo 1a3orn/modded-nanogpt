@@ -250,18 +250,6 @@ class Rotary(nn.Module):
         y2 = x1 * (-sin) + x2 * cos
         return torch.cat((y1, y2), 3).type_as(x_BTHD)
 
-import math
-
-import torch
-import torch.nn as nn
-
-import torch
-import torch.nn as nn
-
-import math
-import torch
-import torch.nn as nn
-
 
 class TwoTapConv(nn.Module):
     r"""
