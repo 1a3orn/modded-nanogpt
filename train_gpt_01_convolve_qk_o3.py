@@ -296,7 +296,7 @@ class TwoTapConv(nn.Module):
         y = x * w1                                             # current-tap
         y[:, 1:, :, :] += x[:, :-1, :, :] * w0                 # previous-tap (in-place)
 
-        return y                                               # [B, T, H, D]
+        return y.type_as(x)                                               # [B, T, H, D]
 
 
 
