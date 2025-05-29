@@ -268,6 +268,8 @@ class FullTwoTapConv(nn.Module):
         super().__init__()
         self.head_size = head_size
         self.proj = CastedLinear(2 * head_size, head_size)
+        with torch.no_grad():
+            self.proj.weight.data *= 0.1
 
     @torch.compile  # comment out if you’re on ≤ PyTorch 1.x
     def forward(self, x: torch.Tensor) -> torch.Tensor:
