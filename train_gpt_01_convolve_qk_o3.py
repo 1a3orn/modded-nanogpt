@@ -255,39 +255,48 @@ import math
 import torch
 import torch.nn as nn
 
+
 class FullTwoTapConv(nn.Module):
-    """
-    Two-tap (previous + current) causal 1-D convolution implemented
-    with a single `nn.Linear` instead of a manually-registered weight.
+    r"""
+    2-tap 1-D point-wise convolution for transformer heads.
+
+    Expects  x : [batch, length, n_heads, head_dim]
+    Returns  y : [batch, length, n_heads, head_dim]
+
+    y_t = x_t · W_currᵀ  +  x_{t-1} · W_prevᵀ     (x_{-1} := 0)
     """
 
     def __init__(self, head_size: int):
         super().__init__()
         self.head_size = head_size
+        # single parameter: [D, 2·D]  →  split into two [D, D] at runtime
+        self.weight = nn.Parameter(torch.empty(head_size, head_size * 2, dtype=torch.bfloat16))
+        self.reset_parameters()
 
-        # Maps the concatenated pair [prev, cur] from 2*head_size → head_size
-        # Bias is disabled to match the original behaviour.
-        self.proj = CastedLinear(2 * head_size, head_size)
+    def reset_parameters(self):
+        # same fan-in as Conv1d(kernel=2)
+        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        x: [batch, time, n_heads, head_size]
-        returns: [batch, time, n_heads, head_size]
-        """
-        b, t, nh, hd = x.shape
-        assert hd == self.head_size, "last dim must equal head_size"
+    @torch.no_grad()   # comment out if you later add a bias or need grads w.r.t. x
+    def forward(self, x: torch.Tensor) -> torch.Tensor:    # x: [B, T, H, D]
+        B, T, H, D = x.shape
+        assert D == self.head_size, "head_dim mismatch"
 
-        # Shift one step to get the “previous” token, zero-padding the first step
-        x_prev = torch.zeros_like(x)
-        if t > 0:
-            x_prev[:, 1:] = x[:, :-1]
+        w_prev, w_curr = self.weight.split(D, dim=1)       # each [D, D]
 
-        # Concatenate current and previous along the channel dimension
-        x_pair = torch.cat([x_prev, x], dim=-1)          # [b, t, nh, 2*hd]
+        # --- current-step contribution ------------------------------------
+        y = F.linear(x.reshape(-1, D), w_curr)             # [B·T·H, D]
+        y = y.view(B, T, H, D)                             # [B, T, H, D]
 
-        # `nn.Linear` applies to the last dimension, so this preserves shape
-        y = self.proj(x_pair)                            # [b, t, nh, hd]
+        # --- previous-step contribution (only where t > 0) ----------------
+        if T > 1:
+            # x[:, :-1] is a view → reshape keeps it cheap
+            y_prev = F.linear(x[:, :-1, :, :].reshape(-1, D), w_prev) \
+                     .view(B, T - 1, H, D)
+            y[:, 1:, :, :] += y_prev                       # shift + add
+
         return y
+
 
 
 class CausalSelfAttention(nn.Module):
@@ -301,8 +310,8 @@ class CausalSelfAttention(nn.Module):
         # merged QKV weights: suggested by many, implemented by @fernbear.bsky.social, and further improved by @YouJiacheng
         # https://x.com/hi_tysam/status/1879699187107033311
         self.qkv_w = nn.Parameter(torch.empty(3, hdim, dim).uniform_(-bound, bound))
-        self.q_conv = FullTwoTapConv(head_dim)
-        self.k_conv = FullTwoTapConv(head_dim)
+        self.q_conv = FullTwoTapConv(head_dim, num_heads)
+        self.k_conv = FullTwoTapConv(head_dim, num_heads)
         self.lambdas = nn.Parameter(torch.tensor([0.5, 0.5]))
         self.rotary = Rotary(head_dim, max_seq_len)
         self.c_proj = CastedLinear(hdim, dim)
