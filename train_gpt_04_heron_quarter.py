@@ -290,7 +290,7 @@ class MLP(nn.Module):
         self.c_fc = CastedLinear(dim, hdim)
         self.c_proj = CastedLinear(hdim, dim)
         self.c_proj.weight.detach().zero_() # zero init suggested by @Grad62304977
-        self.heron_embeds = nn.Embedding(vocab_size, dim // 4)
+        self.heron_embeds = nn.Embedding(vocab_size, dim)
         with torch.no_grad():
             self.heron_embeds.weight.fill_(1.0)
 
@@ -301,9 +301,9 @@ class MLP(nn.Module):
 
         heron_embeds = self.heron_embeds(input_tokens)
         B, T, D = x.shape
-        x = x.view(B, T, 4, D // 4)
-        x = x * heron_embeds.unsqueeze(-2)
-        x = x.flatten(-2)
+        #x = x.view(B, T, 4, D // 4)
+        x = x * heron_embeds
+        #x = x.flatten(-2)
 
         return x
 
