@@ -486,7 +486,7 @@ if master_process:
     logfile = f"logs/{run_id}.txt"
     print(logfile)
     print("WANDB_API_KEY: ", os.environ["WANDB_API_KEY"])
-    rt = wandb.init(project="nanogpt_experiment_05", config=args, name="04_heron_quarter_lr_0.025_init_0.0")
+    rt = wandb.init(project="nanogpt_experiment_05", config=args, name="04_heron_quarter_lr_0.0125_init_0.0")
     if rt is None:
         print("Failed to initialize wandb")
         exit()
@@ -533,7 +533,7 @@ head_params = [model.lm_head.weight]
 adam_params = [
     dict(params=head_params, lr=0.22),
     dict(params=embed_params, lr=0.6),
-    dict(params=heron_embed_params, lr=0.025),
+    dict(params=heron_embed_params, lr=0.0125),
     dict(params=scalar_params, lr=0.04)
 ]
 # small adam epsilon by @YouJiacheng. this is an alternate method of fixing the world_size dependence
