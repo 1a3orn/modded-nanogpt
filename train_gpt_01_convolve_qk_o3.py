@@ -266,7 +266,7 @@ class FullTwoTapConv(nn.Module):
     y_t = x_t · W_currᵀ  +  x_{t-1} · W_prevᵀ     (x_{-1} := 0)
     """
 
-    def __init__(self, head_size: int):
+    def __init__(self, head_size: int, num_heads: int):
         super().__init__()
         self.head_size = head_size
         # single parameter: [D, 2·D]  →  split into two [D, D] at runtime
