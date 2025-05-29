@@ -255,47 +255,44 @@ import math
 import torch
 import torch.nn as nn
 
+import torch
+import torch.nn as nn
 
 class FullTwoTapConv(nn.Module):
-    r"""
-    2-tap 1-D point-wise convolution for transformer heads.
-
-    Expects  x : [batch, length, n_heads, head_dim]
-    Returns  y : [batch, length, n_heads, head_dim]
-
-    y_t = x_t · W_currᵀ  +  x_{t-1} · W_prevᵀ     (x_{-1} := 0)
+    """
+    Faster two-tap (previous + current) causal 1-D convolution.
+    The heavy lifting (matmul, casting, bias) stays entirely inside `CastedLinear`.
     """
 
     def __init__(self, head_size: int, num_heads: int):
         super().__init__()
         self.head_size = head_size
-        # single parameter: [D, 2·D]  →  split into two [D, D] at runtime
-        self.weight = nn.Parameter(torch.empty(head_size, head_size * 2, dtype=torch.bfloat16))
-        self.reset_parameters()
+        self.proj = CastedLinear(2 * head_size, head_size)
 
-    def reset_parameters(self):
-        # same fan-in as Conv1d(kernel=2)
-        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+    @torch.compile  # comment out if you’re on ≤ PyTorch 1.x
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        x: [batch, time, n_heads, head_size]
+        returns: same shape
+        """
+        b, t, nh, hd = x.shape
+        assert hd == self.head_size, "last dim must equal head_size"
 
-    @torch.no_grad()   # comment out if you later add a bias or need grads w.r.t. x
-    def forward(self, x: torch.Tensor) -> torch.Tensor:    # x: [B, T, H, D]
-        B, T, H, D = x.shape
-        assert D == self.head_size, "head_dim mismatch"
+        # ------------------------------------------------------------------ #
+        # Build the [prev | cur] pair **without** concatenation or roll.     #
+        # ------------------------------------------------------------------ #
+        x_pair = torch.empty((b, t, nh, 2 * hd), dtype=x.dtype, device=x.device)
 
-        w_prev, w_curr = self.weight.split(D, dim=1)       # each [D, D]
+        # Right half := current token (contiguous copy)
+        x_pair[..., hd:] = x
 
-        # --- current-step contribution ------------------------------------
-        y = F.linear(x.reshape(-1, D), w_curr)             # [B·T·H, D]
-        y = y.view(B, T, H, D)                             # [B, T, H, D]
+        # Left half := previous token, causal-padded with zeros
+        x_pair[..., :hd].zero_()          # zero pad first step
+        if t > 1:                         # copy shift in a single kernel
+            x_pair[:, 1:, :, :hd] = x[:, :-1]
 
-        # --- previous-step contribution (only where t > 0) ----------------
-        if T > 1:
-            # x[:, :-1] is a view → reshape keeps it cheap
-            y_prev = F.linear(x[:, :-1, :, :].reshape(-1, D), w_prev) \
-                     .view(B, T - 1, H, D)
-            y[:, 1:, :, :] += y_prev                       # shift + add
-
-        return y
+        # All matmul/precision work is still inside CastedLinear
+        return self.proj(x_pair)
 
 
 
