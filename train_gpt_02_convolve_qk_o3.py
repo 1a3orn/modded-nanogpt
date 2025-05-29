@@ -266,7 +266,7 @@ class FullTwoTapConv(nn.Module):
         super().__init__()
         self.head_size = head_size
         # single parameter: [D, 2·D]  →  split into two [D, D] at runtime
-        self.weight = nn.Parameter(torch.empty(head_size, head_size * 2), dtype=torch.bfloat16)
+        self.weight = nn.Parameter(torch.empty(head_size, head_size * 2, dtype=torch.bfloat16))
         self.reset_parameters()
 
     def reset_parameters(self):
