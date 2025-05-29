@@ -251,6 +251,8 @@ class Rotary(nn.Module):
         return torch.cat((y1, y2), 3).type_as(x_BTHD)
 
 
+import math
+
 class TwoTapConv(nn.Module):
     r"""
     Fused 2-tap “conv” on the **time** axis with **per-head** parameters.
