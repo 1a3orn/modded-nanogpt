@@ -251,10 +251,6 @@ class Rotary(nn.Module):
         return torch.cat((y1, y2), 3).type_as(x_BTHD)
 
 import math
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
 
 class FullTwoTapConv(nn.Module):
     r"""

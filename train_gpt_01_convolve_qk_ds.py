@@ -250,6 +250,8 @@ class Rotary(nn.Module):
         y2 = x1 * (-sin) + x2 * cos
         return torch.cat((y1, y2), 3).type_as(x_BTHD)
 
+import math
+
 class FullTwoTapConv(nn.Module):
 
     def __init__(self, head_size: int):
