@@ -289,10 +289,10 @@ class MLP(nn.Module):
         hdim = 4 * dim
         self.c_fc = CastedLinear(dim, hdim)
         self.c_proj = CastedLinear(hdim, dim)
-        # self.c_proj.weight.detach().zero_() # zero init suggested by @Grad62304977
+        self.c_proj.weight.detach().zero_() # zero init suggested by @Grad62304977
         self.heron_embeds = nn.Embedding(vocab_size, dim // 4)
         with torch.no_grad():
-            self.heron_embeds.weight.fill_(0.0)
+            self.heron_embeds.weight.fill_(1.0)
 
     def forward(self, x: Tensor, input_tokens: Tensor):
         x = self.c_fc(x)
