@@ -274,7 +274,7 @@ class TwoTapConv(nn.Module):
         self.head_dim = head_dim
 
         # weight shape  →  (heads, head_dim, 2)
-        self.weight = nn.Parameter(torch.empty(num_heads, head_dim, 2, dtype=torch.bfloat32))
+        self.weight = nn.Parameter(torch.empty(num_heads, head_dim, 2, dtype=torch.float32))
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
