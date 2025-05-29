@@ -513,7 +513,7 @@ if master_process:
     logfile = f"logs/{run_id}.txt"
     print(logfile)
     print("WANDB_API_KEY: ", os.environ["WANDB_API_KEY"])
-    rt = wandb.init(project="nanogpt_experiment_05", config=args, name="01_qk_convolve_full")
+    rt = wandb.init(project="nanogpt_experiment_05", config=args, name="01_qk_convolve_full_ds")
     if rt is None:
         print("Failed to initialize wandb")
         exit()
