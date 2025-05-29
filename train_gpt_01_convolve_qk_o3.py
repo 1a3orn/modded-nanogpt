@@ -267,7 +267,7 @@ class FullTwoTapConv(nn.Module):
 
         # Maps the concatenated pair [prev, cur] from 2*head_size → head_size
         # Bias is disabled to match the original behaviour.
-        self.proj = CastedLinear(2 * head_size, head_size, bias=False)
+        self.proj = CastedLinear(2 * head_size, head_size)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
