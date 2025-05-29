@@ -258,43 +258,55 @@ import torch.nn as nn
 import torch
 import torch.nn as nn
 
-class FullTwoTapConv(nn.Module):
-    """
-    Faster two-tap (previous + current) causal 1-D convolution.
-    The heavy lifting (matmul, casting, bias) stays entirely inside `CastedLinear`.
+import math
+import torch
+import torch.nn as nn
+
+
+class TwoTapConv(nn.Module):
+    r"""
+    Fused 2-tap “conv” on the **time** axis with **per-head** parameters.
+
+    Layout
+    ------
+    • Input  : [batch, time, heads, head_dim]
+    • Output : [batch, time, heads, head_dim]
+
+    Equation
+    --------
+        y_t = w1*h * x_t  +  w0*h * x_{t-1}      (x_{-1}=0)
+
+    where (w0*h, w1*h) is a distinct weight pair for every **head** *and*
+    every **head-dim** component.  No transposes, no extra buffers.
     """
 
-    def __init__(self, head_size: int, num_heads: int):
+    def __init__(self, num_heads: int, head_dim: int) -> None:
         super().__init__()
-        self.head_size = head_size
-        self.proj = CastedLinear(2 * head_size, head_size)
-        with torch.no_grad():
-            self.proj.weight.data *= 0.1
+        self.num_heads = num_heads
+        self.head_dim = head_dim
 
-    @torch.compile  # comment out if you’re on ≤ PyTorch 1.x
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        x: [batch, time, n_heads, head_size]
-        returns: same shape
-        """
-        b, t, nh, hd = x.shape
-        #assert hd == self.head_size, "last dim must equal head_size"
+        # weight shape  →  (heads, head_dim, 2)
+        self.weight = nn.Parameter(torch.empty(num_heads, head_dim, 2, dtype=torch.bfloat16))
+        self.reset_parameters()
 
-        # ------------------------------------------------------------------ #
-        # Build the [prev | cur] pair **without** concatenation or roll.     #
-        # ------------------------------------------------------------------ #
-        x_pair = torch.empty((b, t, nh, 2 * hd), dtype=x.dtype, device=x.device)
+    def reset_parameters(self) -> None:
+        # Match Conv1d default (a = √5)
+        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
 
-        # Right half := current token (contiguous copy)
-        x_pair[..., hd:] = x
+    @torch.jit.ignore
+    def extra_repr(self) -> str:      # keeps repr tidy
+        return f'num_heads={self.num_heads}, head_dim={self.head_dim}'
 
-        # Left half := previous token, causal-padded with zeros
-        x_pair[..., :hd].zero_()          # zero pad first step
-        if t > 1:                         # copy shift in a single kernel
-            x_pair[:, 1:, :, :hd] = x[:, :-1]
+    def forward(self, x: torch.Tensor) -> torch.Tensor:        # x: [B, T, H, D]
+        # Grab taps and reshape once for broadcast: [1, 1, H, D]
+        w0 = self.weight[..., 0].view(1, 1, self.num_heads, self.head_dim)
+        w1 = self.weight[..., 1].view(1, 1, self.num_heads, self.head_dim)
 
-        # All matmul/precision work is still inside CastedLinear
-        return self.proj(x_pair)
+        y = x * w1                                             # current-tap
+        y[:, 1:, :, :] += x[:, :-1, :, :] * w0                 # previous-tap (in-place)
+
+        return y                                               # [B, T, H, D]
+
 
 
 
