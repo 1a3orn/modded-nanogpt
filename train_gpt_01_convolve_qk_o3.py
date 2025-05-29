@@ -276,7 +276,7 @@ class FullTwoTapConv(nn.Module):
         returns: same shape
         """
         b, t, nh, hd = x.shape
-        assert hd == self.head_size, "last dim must equal head_size"
+        #assert hd == self.head_size, "last dim must equal head_size"
 
         # ------------------------------------------------------------------ #
         # Build the [prev | cur] pair **without** concatenation or roll.     #
