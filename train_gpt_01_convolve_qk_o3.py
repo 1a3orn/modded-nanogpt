@@ -274,12 +274,13 @@ class TwoTapConv(nn.Module):
         self.head_dim = head_dim
 
         # weight shape  →  (heads, head_dim, 2)
-        self.weight = nn.Parameter(torch.empty(num_heads, head_dim, 2, dtype=torch.bfloat16))
+        self.weight = nn.Parameter(torch.empty(num_heads, head_dim, 2, dtype=torch.bfloat32))
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
         # Match Conv1d default (a = √5)
         nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+
 
     @torch.jit.ignore
     def extra_repr(self) -> str:      # keeps repr tidy
