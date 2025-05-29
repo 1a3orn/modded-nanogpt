@@ -486,7 +486,7 @@ if master_process:
     logfile = f"logs/{run_id}.txt"
     print(logfile)
     print("WANDB_API_KEY: ", os.environ["WANDB_API_KEY"])
-    rt = wandb.init(project="nanogpt_experiment_05", config=args, name="04_heron_quarter")
+    rt = wandb.init(project="nanogpt_experiment_05", config=args, name="04_heron_quarter_lr_0.2_init_0.0")
     if rt is None:
         print("Failed to initialize wandb")
         exit()
