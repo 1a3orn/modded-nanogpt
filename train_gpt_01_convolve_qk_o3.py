@@ -313,6 +313,7 @@ class CausalSelfAttention(nn.Module):
         self.qkv_w = nn.Parameter(torch.empty(3, hdim, dim).uniform_(-bound, bound))
         self.q_conv = TwoTapConv(num_heads, head_dim)
         self.k_conv = TwoTapConv(num_heads, head_dim)
+        self.v_conv = TwoTapConv(num_heads, head_dim)
         self.lambdas = nn.Parameter(torch.tensor([0.5, 0.5]))
         self.rotary = Rotary(head_dim, max_seq_len)
         self.c_proj = CastedLinear(hdim, dim)
@@ -324,6 +325,7 @@ class CausalSelfAttention(nn.Module):
         q, k, v = F.linear(x, self.qkv_w.flatten(end_dim=1).type_as(x)).view(B, T, 3 * self.num_heads, self.head_dim).chunk(3, dim=-2)
         q = self.q_conv(q)
         k = self.k_conv(k)
+        v = self.v_conv(v)
         q, k = norm(q), norm(k) # QK norm @Grad62304977
         q, k = self.rotary(q), self.rotary(k)
         if ve is not None:
