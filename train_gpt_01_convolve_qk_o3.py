@@ -283,7 +283,7 @@ class TwoTapConv(nn.Module):
         # Match Conv1d default (a = √5)
         nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
         with torch.no_grad():
-            self.weight.data *= 0.1
+            self.weight.data *= 1.0
 
 
     @torch.jit.ignore
@@ -325,11 +325,11 @@ class CausalSelfAttention(nn.Module):
         B, T = x.size(0), x.size(1) # batch size, sequence length
         assert B == 1, "Must use batch size = 1 for FlexAttention"
         q, k, v = F.linear(x, self.qkv_w.flatten(end_dim=1).type_as(x)).view(B, T, 3 * self.num_heads, self.head_dim).chunk(3, dim=-2)
-        q = self.q_conv(q)
-        k = self.k_conv(k)
         #v = self.v_conv(v)
         q, k = norm(q), norm(k) # QK norm @Grad62304977
         q, k = self.rotary(q), self.rotary(k)
+        q = self.q_conv(q)
+        k = self.k_conv(k)
         if ve is not None:
             v = self.lambdas[0] * v + self.lambdas[1] * ve.view_as(v) # @KoszarskyB & @Grad62304977
         else: # skip mid-layers token value embeddings by @YouJiacheng
