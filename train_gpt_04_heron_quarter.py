@@ -289,10 +289,10 @@ class MLP(nn.Module):
         hdim = 4 * dim
         self.c_fc = CastedLinear(dim, hdim)
         self.c_proj = CastedLinear(hdim, dim)
-        #self.c_proj.weight.detach().zero_() # zero init suggested by @Grad62304977
+        self.c_proj.weight.detach().zero_() # zero init suggested by @Grad62304977
         self.heron_embeds = nn.Embedding(vocab_size, dim // 4)
         with torch.no_grad():
-            self.heron_embeds.weight.fill_(0.0)
+            self.heron_embeds.weight.fill_(1.0)
 
     def forward(self, x: Tensor, input_tokens: Tensor):
         x = self.c_fc(x)
@@ -533,7 +533,7 @@ head_params = [model.lm_head.weight]
 adam_params = [
     dict(params=head_params, lr=0.22),
     dict(params=embed_params, lr=0.6),
-    dict(params=heron_embed_params, lr=0.05),
+    dict(params=heron_embed_params, lr=0.2),
     dict(params=scalar_params, lr=0.04)
 ]
 # small adam epsilon by @YouJiacheng. this is an alternate method of fixing the world_size dependence
