@@ -309,7 +309,6 @@ class TwoTapConv(nn.Module):
 
 
 
-
 class CausalSelfAttention(nn.Module):
     def __init__(self, dim: int, num_heads: int, max_seq_len: int, head_dim=128):
         super().__init__()
@@ -321,8 +320,8 @@ class CausalSelfAttention(nn.Module):
         # merged QKV weights: suggested by many, implemented by @fernbear.bsky.social, and further improved by @YouJiacheng
         # https://x.com/hi_tysam/status/1879699187107033311
         self.qkv_w = nn.Parameter(torch.empty(3, hdim, dim).uniform_(-bound, bound))
-        self.q_conv = FullTwoTapConv(head_dim, num_heads)
-        self.k_conv = FullTwoTapConv(head_dim, num_heads)
+        self.q_conv = TwoTapConv(head_dim, num_heads)
+        self.k_conv = TwoTapConv(head_dim, num_heads)
         self.lambdas = nn.Parameter(torch.tensor([0.5, 0.5]))
         self.rotary = Rotary(head_dim, max_seq_len)
         self.c_proj = CastedLinear(hdim, dim)
