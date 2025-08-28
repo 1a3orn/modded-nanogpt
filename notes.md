@@ -5,13 +5,16 @@ Base:
 - 3.2791 @ 326,854ms - step_avg:186.77ms
 - 3.2783 @ 335,423ms - step_avg:191.67ms
 
-Zero init:
+Zero Init:
 - 3.2708 @ 333832ms - step avg 190.76ms
 - 3.2688 @ 339941ms - step_avg:194.25ms
 - 3.2701 @ 344508ms - step_avg:196.86ms
 - 3.2692 @ 340358ms - step_avg:194.49ms
 
+Zero Init 10% Higher LR:
+
 Zero Init 20% Higher LR:
+- 3.2788 train_time:344850ms step_avg:197.06ms
 
 Nonzero init:
 - 3.2682 @ 344435ms - step_avg:196.82ms

@@ -626,8 +626,8 @@ head_params = [model.lm_head.weight]
 # init the optimizer(s)
 # small adam epsilon by @YouJiacheng. this is an alternate method of fixing the world_size dependence
 # discovered by @fernbear.bsky.social https://x.com/hi_tysam/status/1879692937589875094
-optimizer1 = DistAdam(scalar_params + head_params + embed_params, lr=0.008 * 1.1, betas=(0.8, 0.95), eps=1e-10, weight_decay=0.0)
-optimizer2 = Muon(hidden_matrix_params, lr=0.05 * 1.1, momentum=0.95, weight_decay=0.0)
+optimizer1 = DistAdam(scalar_params + head_params + embed_params, lr=0.008 * 0.95, betas=(0.8, 0.95), eps=1e-10, weight_decay=0.0)
+optimizer2 = Muon(hidden_matrix_params, lr=0.05 * 0.95, momentum=0.95, weight_decay=0.0)
 optimizers = [optimizer1, optimizer2]
 for opt in optimizers:
     for group in opt.param_groups:
